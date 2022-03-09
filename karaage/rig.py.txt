@@ -1,0 +1,1341 @@
+### Copyright 2015 Matrice Laville
+###
+### This file is part of Karaage
+### 
+### Karaage is distributed under an End User License Agreement and you
+### should have received a copy of the license together with Karaage.
+### The license can also be obtained from http://www.machinimatrix.org/
+
+import bpy, os, logging
+from bpy.props import *
+#import  xml.etree.ElementTree as et
+from . import data, const, util
+from .util import Skeleton
+from .const import *
+from mathutils import Vector, Matrix
+
+def matrixToStringArray(M, precision=6, location_precision=None):
+    p = precision
+    lp = location_precision if location_precision else p
+    mat = ["%g"%round(M[ii][jj], lp if jj == 3 and ii != 3 else p) for ii in range(4) for jj in range(4)]
+    return mat
+
+def calculate_bind_shape_matrix(arm, mesh, with_rot=True):
+    Marm = arm.matrix_world
+    
+    # We only need to apply translation, 
+    # locrot has been applied to the mesh, see util.getMesh()
+    t = mesh.matrix_world.to_translation()
+    mat = Matrix.Translation(t)
+
+    bsm = Rz90I*Marm.inverted() *mat if with_rot else mat
+    return bsm
+
+#
+# return the location relative to the armature's origin
+# Note: Must be called with edit_bone (armature in edit mode)
+#
+def get_offset_to_parent(bone, get_roll=True):
+    
+    head = Vector(bone.head)
+    tail = Vector(bone.tail)
+    roll = bone.roll if get_roll else 0;
+    
+    parent = bone.parent
+    if parent:
+        head -= bone.parent.head
+        tail -= bone.parent.tail
+
+    return head, tail, roll
+#
+# return the offset from the bone's SL restpose
+#
+def get_offset_from_sl_bone(bone, corrs=None, get_roll=True):
+    head, tail, roll = get_offset_to_parent(bone, get_roll)
+    head -= Vector(bone['relhead'])
+    tail -= Vector(bone['reltail'])
+    
+    if corrs:
+        corr = corrs.get(bone.name, None)
+        if corr:
+            head -= Vector(corr['head'])
+            tail -= Vector(corr['tail'])    
+
+    return head, tail, roll
+
+#
+# return the offset from the bone's SL restpose:
+# hd :  disposition of head from expected location (with sliders applied)
+# td :  disposition of tail from expected location (with sliders applied)
+# roll: bone roll
+#
+# Note: Must be called with edit_bone (armature in edit mode)
+#
+def get_offset_from_boneset(armobj, bone, bones, Bones):
+
+        h = Vector(bone.head) 
+        t = Vector(bone.tail)
+        h0, t0, roll = get_head_and_tail(armobj, 
+                                         bone,
+                                         bones,
+                                         Bones,
+                                         with_offset=False,
+                                         with_corrs=False,
+                                         with_parent_offset=True)
+        hd = h - h0
+        td = t -h - t0
+        return hd, td, roll
+
+# Note: Must be called with edit_bone (armature in edit mode):
+def get_corrective_from_armature(arm):
+    joints = {}
+    bones = util.get_modify_bones(arm)
+    Bones=data.get_reference_boneset(arm)
+    
+    for bone in bones:
+        #bone = util.get_effective_bone(bone, bones)
+        head, tail, roll = get_offset_from_boneset(arm, bone, bones, Bones)
+        joints[bone.name] = {"head":head, "tail":tail, "roll":roll}
+    return joints
+
+def get_bone_names_with_jointpos(arm):
+
+    joints = arm.get('sl_joints')
+    if joints == None:
+        return []
+
+    boneset = joints.keys()
+    bones   = util.get_modify_bones(arm)
+
+    resultset = set()
+    for name in boneset:
+        resultset.add(name)
+        if name[0]=='m' and name[1:] in bones:
+            resultset.add(name[1:])
+        elif 'm' + name in bones:
+            resultset.add('m'+name)
+    return resultset
+
+def treat_as_linked(bone,ebones):
+    connected = is_linked(bone, ebones)
+    if not connected and bone.name[0] == 'm':
+        dbone = ebones.get(bone.name[1:])
+        if dbone:
+            connected = dbone.use_connect
+    return connected
+
+def is_linked(bone,ebones):
+    connected = bone.use_connect
+    if not connected and bone.parent:
+        head = getattr(bone,        'head_local', getattr(bone,'head'))
+        tail = getattr(bone.parent, 'tail_local', getattr(bone.parent,'tail'))
+        mag = (head - tail).magnitude
+        connected = mag < 0.0001
+    return connected
+
+def get_joint_bones(arm, all=True, sort=True, sync=True):
+    ebones = util.get_modify_bones(arm)
+    keys = util.Skeleton.bones_in_hierarchical_order(arm) if sort else ebones.keys()
+    
+    bones = [ebones[name] for name in keys if name[0] in ["m", "a"] or name in SLVOLBONES or "m"+name in ebones]
+
+    if not all:
+        bones = [b for b in bones if b.select_head or (b.parent and b.parent.select_tail and treat_as_linked(b,ebones))]
+
+    return bones
+
+def get_cb_partner(bone, bones):
+    pname = bone.name[1:] if bone.name[0] == 'm' else 'm' + bone.name
+    return bones.get(pname)
+
+def reset_bone(bone, ebones, boneset, mode):
+    head  = Skeleton.head(bone, ebones)
+    tail  = Skeleton.tail(bone, ebones)
+    roll  = boneset[bone.name].roll
+
+    if 'fix_head' in bone: del bone['fix_head'] 
+    if 'fix_tail' in bone: del bone['fix_tail']
+    
+    if mode == 'EDIT':
+        bone.head = head
+        bone.tail = tail
+        bone.roll = roll
+
+    else:
+        bone.head_local = head
+        bone.tail_local = tail
+
+def remove_joint_from_armature(bone, joints):
+    if bone.name in joints:
+        del joints[bone.name]
+
+        print("Joint offset removed from %s" % (bone.name) )
+    
+def del_offset_from_sl_armature(arm, sync=True, reset=False):
+    print("del_offset_from_sl_armature (%s)" % (arm.name))
+    boneset = data.get_reference_boneset(arm)
+    bones = get_joint_bones(arm, all=arm.AnimProps.affect_all_joints)
+
+    ebones = arm.data.edit_bones
+    if reset:
+        print("Reset %d selected edit bones" % (len(bones)) )
+        for b in bones:
+            mbone, cbone = get_sync_pair(b, ebones)
+            if mbone and cbone:
+                #print("Reset bone pair %s:%s" % (mbone.name, cbone.name) )
+                reset_bone(mbone, ebones, boneset, arm.mode)
+                reset_bone(cbone, ebones, boneset, arm.mode)
+            else:
+                #print("Reset bone      %s" % (b.name) )
+                reset_bone(b, ebones, boneset, arm.mode)
+
+    joints  = arm.get('sl_joints', None)
+    if joints:
+        print("Removing %d Jointpos definitions" % (len(joints)) )
+        for b in bones:
+            mbone, cbone = get_sync_pair(b, ebones)
+            if mbone and cbone:
+                remove_joint_from_armature(mbone, joints)
+                remove_joint_from_armature(cbone, joints)
+            else:
+                remove_joint_from_armature(b, joints)
+
+    return joints
+
+def copy_bone (from_bone, to_bone, mode):
+   if mode == 'EDIT':
+       #print ("pcopy: head from:%s(%s) to:%s(%s)" % (from_bone.name, Vector(from_bone.head), to_bone.name, Vector(to_bone.head) ))
+       #print ("pcopy: tail from:%s(%s) to:%s(%s)" % (from_bone.name, Vector(from_bone.tail), to_bone.name, Vector(to_bone.tail) ))
+       to_bone.head = from_bone.head
+       to_bone.tail = from_bone.tail
+       to_bone.roll = from_bone.roll
+   else:
+       #print ("ecopy: head from:%s(%s) to:%s(%f)" % (from_bone.name, Vector(from_bone.head_local), to_bone.name, Vector(to_bone.head_local) ))
+       #print ("ecopy: tail from:%s(%s) to:%s(%s)" % (from_bone.name, Vector(from_bone.tail_local), to_bone.name, Vector(to_bone.tail_local) ))
+       to_bone.head_local = from_bone.head_local
+       to_bone.tail_local = from_bone.tail_local
+       #Can copy roll only in edit mode!
+   
+def get_sync_pair(bone, bones):
+    name = bone.name
+    if name[0] == 'm':
+        mbone = bone
+        cbone = bones.get(name[1:])
+    elif name[0] == "a" or name in SLVOLBONES:
+        mbone = cbone = None
+    else:
+        cbone = bone
+        mbone = bones.get('m'+name)
+    return mbone, cbone
+
+def synchronize_bone(bone, bones, mode):
+    mbone, cbone = get_sync_pair(bone, bones)
+        
+    if mbone and cbone:
+        if mbone.select_head:
+            copy_bone (mbone, cbone, mode)
+        else:
+            copy_bone (cbone, mbone, mode)
+
+# Return the location of the joint
+# and the offset of the tail from the head (delta vector)
+def get_head_and_tail(armobj,
+                      reference_bone,
+                      ebones,
+                      boneset,
+                      sync=True,
+                      with_offset=True,
+                      with_corrs=True,
+                      with_parent_offset=True
+    ):
+
+    # The expected location of the bone without joint offsets but sliders applied
+    Mh = Skeleton.headMatrix(reference_bone, ebones,     scaled=True)
+    #
+    #get the sum of all joint positions of the bone chain from reference_bone up to Origin 
+    joints = armobj.get('sl_joints',None)
+    has_roll = armobj.mode == 'EDIT'
+    h, t, roll = get_joint_position(reference_bone,
+                     ebones,
+                     joints,
+                     sync=sync,
+                     has_roll=has_roll,
+                     with_offset=with_offset,
+                     with_parent_offset=with_parent_offset)
+    #
+    # Apply Corrective offsets if available
+    ch = Vector((0,0,0))
+    ct = Vector((0,0,0))
+    if with_corrs and 'sl_correction' in armobj:
+        corrs=armobj['sl_correction']
+        corr = corrs.get(reference_bone.name)
+        if corr:
+            ch = Vector(corr['head'])
+            ct = Vector(corr['tail'])
+            roll = corr['roll']
+    #
+    #Mt = Skeleton.tailMatrix(reference_bone, ebones, Mh, scaled=True)
+    #tail_local = Mt.translation.copy()
+    Mh = util.matrixLocation(h+ch, Mh)
+    head_local  = Mh.translation.copy()
+    Mt = Skeleton.tailMatrix(reference_bone, ebones,  Mh,   scaled=True)
+    tail_local  = Mt.translation.copy()
+    tail_local += t + ct
+    #
+    #Take care to always have a bone length. Otherwise Blender will silently remove the Bone
+    if (tail_local).magnitude < 0.001:
+        print("Zero size bone not allowed in Blender: displace tail of bone %s" % (reference_bone.name) )
+        tail_local[1] += 0.01
+    #
+    # Note:
+    # (1) is the location of the joint
+    # (2) is the distance vector of the bone tail relative to the joint 
+    # (3) is the bone roll if available or 0
+    return head_local, tail_local-head_local, roll
+
+
+def calculate_offset_from_sl_armature(arm, joints=None, corrs=None, all=False, sync=False, hover=None):
+    print("INFO cofa: (%s) sync is %s " % (arm.name, sync))
+    if joints is None:
+        print("INFO cofa: Create new joints repo for arm %s" % (arm.name) )
+        joints = {}
+
+    has_roll = arm.mode == 'EDIT'
+    joint_bones = get_joint_bones(arm, all=all, sort=True)
+    bones       = util.get_modify_bones(arm)
+    Bones       = data.get_reference_boneset(arm)
+
+    ignored = 0
+    if not hover:
+        hover = util.Skeleton.get_hover(bones)
+
+    print("INFO cofa: processing %d joint bones for arm %s" % (len(joint_bones), arm.name) )
+
+    JOINT_OFFSET = util.get_min_joint_offset()
+
+    for jbone in joint_bones:
+        if sync:
+            synchronize_bone(jbone, bones, arm.mode)
+
+        bone = util.get_effective_bone(jbone, bones)
+        if joints and bone.name in joints:
+            del joints[bone.name]
+
+        # this is the relative offset from the parent bone
+        # Note: sliders are applied and offsets are added to the parent bones
+        head, tail, roll = get_offset_from_boneset(arm, bone, bones, Bones)
+        #transformation matrix without offsets!
+        Mh = Skeleton.headMatrix(bone, bones,     scaled=True)
+        Mt = Skeleton.tailMatrix(bone, bones, Mh, scaled=True)
+
+        #removing translation part so we remain with the sum of all Slider scales for the bone
+        util.matrixLocation([0,0,0], Mh, True) # remove the translation part
+        util.matrixLocation([0,0,0], Mt, True) # remove the translation part
+
+        ihead = Mh.inverted()*head
+        itail = Mh.inverted()*tail
+
+        if ihead.magnitude > JOINT_OFFSET or itail.magnitude > JOINT_OFFSET :
+
+            key, joint = get_joint_for_bone(joints, bone.name, sync) # Only want the name here
+            joints[key] = {"head":ihead, "tail":itail, "roll":roll}
+
+            if ihead.magnitude > JOINT_OFFSET:
+                print("INFO cofa: Offset head added:   m:% .4f h:[% .4f % .4f % .4f] for %s/%s" % (ihead.magnitude, *ihead, key, jbone.name) )
+            if itail.magnitude > JOINT_OFFSET:
+                print("INFO cofa: Offset tail added:   m:% .4f t:[% .4f % .4f % .4f] for %s/%s" % (itail.magnitude, *itail, key, jbone.name) )
+
+        elif bone.name in joints:
+            del joints[bone.name]
+            print("INFO cofa: Offset removed: %s  for %s" % (head, jbone.name) )
+        elif all:
+            ignored += 1
+        else:
+            #print("INFO cofa: Offset ignored: m:% .4f v:%s  for %s" % (head.magnitude, head, jbone.name) )
+            ignored += 1
+
+    if ignored > 0:
+        print("INFO cofa: %d joint positions with shift < %f ignored" % (ignored, JOINT_OFFSET) )
+    print("INFO cofa: processed %d joint bones for arm %s" % (len(joint_bones), arm.name) )
+    return joints
+
+def get_joint_for_bone(joints, name, sync=False):
+
+    if joints == None:
+        print("ABORT: reason: get_joint_for_bone: no joints defined")
+        return None, None
+
+    # If mBone and Control bone both have a joint pos defined
+    # then then use the one from the control Bone
+    jname = name[1:] if sync and name[0] == 'm' else name
+
+    joint = joints.get(jname)
+    if sync and not joint:
+
+        jname = 'm' + jname
+        joint = joints.get(jname)
+
+        if not joint:
+            jname = name
+
+    return jname, joint
+
+def is_parented(bone, bones):
+
+    name = bone.name
+    if not bone.parent:
+        return False
+    
+    if bone.use_connect:
+        return True
+
+    if name[0] == 'm':
+        # Check the control bone chain for connections
+        cbone = bones.get(name[1:])
+        if not cbone or not cbone.parent:
+            return False
+        
+        #check if control bone.parent is control bone of bone.parent
+        if 'm' + cbone.parent.name != bone.parent.name:
+            return False
+
+        return cbone.use_connect
+
+    return False        
+
+def get_joint_position(bone, ebones, joints, sync, has_roll=False, with_offset=True, with_parent_offset=True):
+    name = bone.name
+    t0 = Vector((0,0,0))
+    roll = None
+    if bone.parent and with_parent_offset:
+        h0, t0, dummy = get_joint_position(bone.parent, ebones, joints, sync, has_roll=False, with_offset=True, with_parent_offset=with_parent_offset)
+    else:
+        h0 = Vector((0,0,0))
+        t0 = Vector((0,0,0))
+
+    if has_roll:
+        roll = bone.roll
+
+    if joints:# and with_offset and with_parent_offset:
+    
+        key, joint = get_joint_for_bone(joints, name, sync)
+        if joint:
+            Mh = Skeleton.headMatrix(bone, ebones,     scaled=True)
+            Mt = Skeleton.tailMatrix(bone, ebones, Mh, scaled=True)
+            #removing translation part so we remain with the sum of all Slider scales for the bone
+            util.matrixLocation([0,0,0], Mh, True) # remove the translation part
+            util.matrixLocation([0,0,0], Mt, True) # remove the translation part
+        
+            h0 += Mh*Vector(joint['head'])
+            t0  = Mh*Vector(joint['tail'])
+            roll = joint['roll']
+
+    return h0, t0, roll
+    
+#def set_joint_position(bone, ebones, joints, sync, has_roll=False):
+#    
+#    h0, t0, roll = get_joint_position(bone, ebones, joints, sync, has_roll, with_offset=True)
+#    bone['fix_head'] = h0
+#    bone['fix_tail'] = t0
+#    if roll:
+#        bone.roll = roll
+#    
+#def preset_joint_positions(arm_obj):
+#    joints = arm_obj.get('sl_joints')
+#    bone_names = util.Skeleton.bones_in_hierarchical_order(arm_obj)
+#    bones = util.get_modify_bones(arm_obj)
+#    sync  = arm_obj.AnimProps.sync_control_joints
+#    has_roll = arm_obj.mode == 'EDIT'
+#    #JOINT_OFFSET = util.get_min_joint_offset()
+#    
+#    for name in bone_names:
+#        set_joint_position(bones[name], bones, joints, sync, has_roll)
+
+def get_effective_joint_location(arm, bone, boneset=None, use_corrs=True, with_joints=True, use_pivot=False):
+
+    if not with_joints:
+        pos = (bone.head_local - bone.parent.head_local) if bone.parent else bone.head
+        precision = 6
+        btype = 'no_offset'
+        #print("%s:%s -- %s --o %s" % (arm.mode, pos, bone.name, bone.parent.name if bone.parent else "-"))
+        #print("%s:%s:%s " % (type(bone), bone.head, bone.name))
+        #print("%s:%s:%s " % (type(bone), bone.parent.head, bone.parent.name))
+        return pos, precision, btype
+        
+    if boneset == None:
+        boneset = data.get_reference_boneset(arm)
+
+    pos = Vector(boneset[bone.name].pivot0) if use_pivot else Vector(boneset[bone.name].pos0)
+    joints = arm.get('sl_joints',     None )
+
+    if joints:
+        key, joint = get_joint_for_bone(joints, bone.name)
+        if joint:
+            #corrs  = arm.get('sl_correction', None ) if use_corrs else None
+            #fix, tail, roll = get_offset_from_sl_bone(bone, corrs=corrs, get_roll=False)
+            fix = Vector(joint['head'])
+            mag = fix.magnitude
+            if mag > 0.0001:
+                fix      += pos
+                precision = 6
+                btype      = 'custom_pos'
+            else:
+                fix       = pos
+                precision = 6 if use_pivot else 3
+                btype      = 'default_pos'
+        else:
+            fix       = pos
+            precision = 6 if use_pivot else 3
+            btype      = 'no_offset'
+
+    else:
+        fix       = pos
+        precision = 6 if use_pivot else 3
+        btype      = 'avatar_pos'
+
+    #print("%s: p:%d: joint:%s fix:%s pos:%s mag:%0.4f (%s)" % (btype, precision, joint, fix, pos, mag, bone.name) )
+    return fix, precision, btype
+
+# ==========================================================
+# arm must have a given rigtype
+# and rigtype must have been loaded
+#
+# If no joint positions are used, then return 
+# the Restpose from the Avatar_skeleton file
+# 
+# If a Joint position is used, then return
+# The local joint matrix (to be verified)
+#
+# Todo: Determine wheather a joint position is defined
+#       General appraoch:
+#       check if the current joint position can be calculated
+#       from the slider values
+#       if the numbers diverge -> joint postion defined
+# ===========================================================
+def calculate_pivot_matrix(arm, bone, boneset=None, with_rot=True, with_joints=True, use_pivot=False):
+
+    loc, p, type = get_effective_joint_location(arm, bone, boneset=None, with_joints=with_joints, use_pivot=use_pivot)
+    if with_rot:
+        loc = [-loc.y, loc.x, loc.z]
+
+    M   = util.matrixLocation(loc)    
+    return M, p, type
+
+def set_bone_to_restpose(arm, bone, boneset):
+    if bone.name[0] in ["m", "a"] or bone.name in SLVOLBONES:
+        restloc, scale, scale0 = calculate_local_matrix(arm, bone, boneset)
+        #vs      = scale+scale0
+        #restloc = Vector([restloc[0]*vs[0], restloc[1]*vs[1], restloc[2]*vs[2]])
+        loc     =  bone.head # returns same value as util.Skeleton.head(bone, bones)
+        disposition = (restloc - loc).magnitude
+        if disposition >= 0.001:
+            print("TODO: expct:[% 0.4f,% 0.4f,% 0.4f] found:[% 0.4f,% 0.4f,% 0.4f] disp:%f s0:[% 0.4f,% 0.4f,% 0.4f] s:[% 0.4f,% 0.4f,% 0.4f] (%s)" % (*restloc, *loc, disposition, *scale0, *scale, bone.name) )
+            #calculate_local_matrix(arm, bone, boneset, verbose=True)
+            bone.head = restloc
+            if bone.name[0]=='m':
+                bones = util.get_modify_bones(arm)
+                cBone = bones.get(bone.name[1:], None)
+                if cBone:
+                    cBone.head = restloc
+            #arm.update_from_editmode()
+
+    for child in bone.children:
+        set_bone_to_restpose(arm, child, boneset)
+
+def set_to_restpose(context, arm):
+    rigtype = arm.get('rigtype','CLASSIC')
+    boneset = data.get_rigtype_boneset(rigtype)
+
+    active = context.object
+    bpy.context.scene.objects.active = arm
+    omode = util.ensure_mode_is('EDIT')
+
+    roots = roots = [b for b in arm.data.edit_bones if b.parent == None]
+    for root in roots:
+        set_bone_to_restpose(arm, root, boneset)
+
+    util.ensure_mode_is('OBJECT')
+    util.ensure_mode_is(omode)
+    bpy.context.scene.objects.active = active
+    return
+
+def calculate_local_matrix(arm, bone, boneset = None, rotate=False, verbose=False):
+
+    if boneset == None:
+        rigtype = arm.get('rigtype','CLASSIC')
+        boneset = data.get_rigtype_boneset(rigtype)
+
+    Bone    = boneset[bone.name]
+    pivot   = Vector(Bone.pivot0)    # pivot comint from avatar_skeleton
+    offset  = Vector(bone['offset']) # offset coming from avatar_lad
+    loc     = pivot + offset
+
+    if bone.name in ['mPelvis'] or not bone.parent:
+        L      = Vector((0,0,0))
+        scale  = Vector((0,0,0))
+        scale0 = Vector((1,1,1))
+    else:
+        L, scale, dummy = calculate_local_matrix(arm, bone.parent, boneset, rotate, verbose)
+        scale  = Vector(bone.parent['scale'])
+        scale0 = Vector(bone.parent['scale0'])
+
+    if rotate:
+        L += Vector([ -loc[1], loc[0], loc[2]])
+    else:
+        L += Vector([ loc[0],  loc[1], loc[2]])
+    
+    if verbose:
+        print("bone %s pivot %s trans %s scale %s" % (bone.name, Vector(pivot), (M*L).translation, scale) )
+
+    return L, scale, scale0
+
+def calculate_bind_matrix(arm, dbone, applyScale, with_rot = True):
+    if dbone.name == "mPelvis":
+        # mPelvis is relative to object center
+        rv = dbone.head_local
+    else:
+        rv = (dbone.head_local-dbone.parent.head_local)
+    if with_rot:
+        rv = rv*Rz90
+
+    scale = util.get_bone_scale(dbone.parent)
+    
+    if applyScale:
+        Marm = arm.matrix_world
+        tl,tr,ts = Marm.decompose()
+        scale[0] = scale[0]/ts[0]
+        scale[1] = scale[1]/ts[1]
+        scale[2] = scale[2]/ts[2]
+
+    if with_rot:
+        M   = util.matrixLocation([rv.x/scale.y, rv.y/scale.x, rv.z/scale.z])    
+    else:
+        M   = util.matrixLocation([rv.x/scale.x, rv.y/scale.y, rv.z/scale.z])    
+    return M
+
+def calculate_inverse_bind_matrix(arm, dbone, applyScale, with_rot=True):
+
+    h = Vector(dbone.head_local)
+    S = util.getBoneScaleMatrix(dbone, normalize=False, verbose=False)
+    if applyScale:
+        Marm = arm.matrix_world
+        tl,tr,ts = Marm.decompose() 
+        S[0][0] = S[0][0]/ts[0]
+        S[1][1] = S[1][1]/ts[1]
+        S[2][2] = S[2][2]/ts[2]
+    
+    L = util.matrixLocation(h)
+    R = Matrix()
+    if 'rot0' in dbone:
+        rx,ry,rz = dbone['rot0']
+        R = Matrix.Rotation(rx,4,'X')*Matrix.Rotation(ry,4,'Y')*Matrix.Rotation(rz,4,'Z')
+        # XXX is this Euler(rot0,'ZYX').to_matrix().to_4x4() ?
+
+    M = L*S*R
+    Minv = M.inverted()
+    if with_rot:
+        Minv = Rz90I*Minv*Rz90
+    
+    return Minv
+
+def get_bones_from_layers(arm, layers):
+    bones   = util.get_modify_bones(arm)
+    boneset = [b for b in bones if any (b.layers[layer] for layer in layers)]
+    return boneset
+
+def get_skeleton_from(armobj):
+    rigtype = armobj.get('rigtype', None)
+    try:
+        path = armobj['skeleton_path']
+    except:
+        armobj['skeleton_path'] = util.get_skeleton_file(rigtype)
+        path = armobj['skeleton_path']
+
+    S = data.getSkeletonDefinition(path, rigtype)
+    return S
+
+def adjustAvatarBonesToRig(armobj, boneset):
+
+    S = get_skeleton_from(armobj)
+
+    for cbone in boneset:
+        try:
+
+            Cbone = S[cbone.name] # The original cbone bone descriptor
+            Mbone = Cbone.parent  # The original mBone descriptor       
+            mbone = cbone.parent  # The mBone partner of the cbone
+
+            DCT   = Vector(Cbone.tail() - Mbone.tail())
+            DCH   = Vector(Cbone.head() - Mbone.head())    # The original mBone in <0,0,0>
+
+            M     = Vector(Mbone.tail() - Mbone.head())
+            m     = mbone.tail_local - mbone.head_local
+            rot   = M.rotation_difference(m) # rotation relative to its default location
+
+            DCH.rotate(rot)
+            DCT.rotate(rot)
+
+            cbone.head_local = mbone.head_local + DCH
+            cbone.tail_local = mbone.tail_local + DCT
+
+        except:
+            print("Could not adjust Bone %s" % (cbone.name) )
+            raise
+
+def adjustVolumeBonesToRig(armobj):
+    omode = util.ensure_mode_is('OBJECT')
+    bones = util.get_modify_bones(armobj)
+    boneset = [b for b in bones if b.layers[B_LAYER_VOLUME]]
+    adjustAvatarBonesToRig(armobj, boneset)
+    util.ensure_mode_is(omode)
+
+def adjustAttachmentBonesToRig(armobj):
+    bones = util.get_modify_bones(armobj)
+    boneset = [b for b in bones if b.layers[B_LAYER_ATTACHMENT]]
+    S = get_skeleton_from(armobj)
+
+    for b in boneset:
+        if b.parent == None: continue
+        p = b.parent                   # The mBone of the volume
+        n = Vector(p.head - p.tail)    # The mBone in <0,0,0>
+
+        B = S[b.name]                  # The original volume bone descriptor
+        P = B.parent                   # The original mBone descriptor
+        N = Vector(P.head() - P.tail())# The original mBone in <0,0,0>
+
+        M = N.rotation_difference(n)
+        
+        l = M*Vector(B.head() - P.head())
+        t = Vector((0,0,0.03))
+
+        bhead  = p.head + Vector(l) 
+        btail  = bhead  + Vector(t)
+        b.head = bhead
+        b.tail = btail
+
+def adjustIKToRig(armobj):
+    bones = util.get_modify_bones(armobj)
+
+    # Feet:
+
+    d = bones['ikHeelLeft'].head - bones['ikHeelLeft'].tail
+    z = bones['ikHeelLeft'].head[2]
+    bones['ikHeelLeft'].head      = bones['AnkleLeft'].head
+    bones['ikHeelLeft'].head[2]   = z
+    bones['ikHeelLeft'].tail      = bones['ikHeelLeft'].head - d
+    bones['ikFootPivotLeft'].head = bones['ikHeelLeft'].head
+    bones['ikFootPivotLeft'].tail = bones['ikHeelLeft'].tail
+
+    d = bones['ikHeelRight'].head - bones['ikHeelRight'].tail
+    z = bones['ikHeelRight'].head[2]
+    bones['ikHeelRight'].head      = bones['AnkleRight'].head
+    bones['ikHeelRight'].head[2]   = z
+    bones['ikHeelRight'].tail      = bones['ikHeelRight'].head - d
+    bones['ikFootPivotRight'].head = bones['ikHeelRight'].head
+    bones['ikFootPivotRight'].tail = bones['ikHeelRight'].tail
+
+    try:
+        d = bones['ikKneeLineLeft'].head - bones['ikKneeLineLeft'].tail
+        bones['ikKneeLineLeft'].head = bones['KneeLeft'].head
+        bones['ikKneeLineLeft'].tail = bones['ikKneeLineLeft'].head - d 
+    except:
+        print("adjustIKtoRig: failed to adjust ['ikKneeLineLeft'] ['KneeLeft']")
+
+    try:
+        d = bones['ikKneeLineRight'].head - bones['ikKneeLineRight'].tail
+        bones['ikKneeLineRight'].head = bones['KneeRight'].head
+        bones['ikKneeLineRight'].tail = bones['ikKneeLineRight'].head - d
+    except:
+        print("adjustIKtoRig: failed to adjust ['ikKneeLineRight'] ['KneeRight']")
+
+    try:
+        d = bones['ikKneeTargetLeft'].head - bones['ikKneeTargetLeft'].tail
+        bones['ikKneeTargetLeft'].head = bones['ikKneeLineLeft'].tail
+        bones['ikKneeTargetLeft'].tail = bones['ikKneeLineLeft'].tail - d
+    except:
+        print("adjustIKtoRig: failed to adjust ['ikKneeTargetLeft'] ['ikKneeLineLeft']")
+
+    try:
+        d = bones['ikKneeTargetRight'].head - bones['ikKneeTargetRight'].tail
+        bones['ikKneeTargetRight'].head = bones['ikKneeLineRight'].tail
+        bones['ikKneeTargetRight'].tail = bones['ikKneeLineRight'].tail - d
+    except:
+        print("adjustIKtoRig: failed to adjust ['ikKneeTargetRight'] ['ikKneeLineRight']")
+
+    try:
+        bones['ikAnkleLeft'].head = bones['AnkleLeft'].head
+        bones['ikAnkleLeft'].tail = bones['AnkleLeft'].tail
+        bones['ikAnkleLeft'].roll = bones['AnkleLeft'].roll
+    except:
+        print("adjustIKtoRig: failed to adjust ['ikKneeTargetRight'] ['ikKneeLineRight']")
+
+    try:
+        bones['ikAnkleRight'].head = bones['AnkleRight'].head
+        bones['ikAnkleRight'].tail = bones['AnkleRight'].tail
+        bones['ikAnkleRight'].roll = bones['AnkleRight'].roll
+    except:
+        print("adjustIKtoRig: failed to adjust ['ikAnkleRight'] ['AnkleRight']")
+
+        # Hands:
+    try:
+        bones['ikWristLeft'].head = bones['WristLeft'].head
+        bones['ikWristLeft'].tail = bones['WristLeft'].tail
+        bones['ikWristLeft'].roll = bones['WristLeft'].roll
+    except:
+        print("adjustIKtoRig: failed to adjust ['ikWristLeft'] ['WristLeft']")
+
+    try:
+        bones['ikWristRight'].head = bones['WristRight'].head
+        bones['ikWristRight'].tail = bones['WristRight'].tail
+        bones['ikWristRight'].roll = bones['WristRight'].roll
+    except:
+        print("adjustIKtoRig: failed to adjust ['ikWristRight'] ['WristRight']")
+
+    try:
+        d = bones['ikElbowLineLeft'].head - bones['ikElbowLineLeft'].tail
+        bones['ikElbowLineLeft'].head = bones['ElbowLeft'].head
+        bones['ikElbowLineLeft'].tail = bones['ikElbowLineLeft'].head - d
+    except:
+        print("adjustIKtoRig: failed to adjust ['ikElbowLineLeft'] ['ElbowLeft']")
+
+    try:
+        d = bones['ikElbowLineRight'].head - bones['ikElbowLineRight'].tail
+        bones['ikElbowLineRight'].head = bones['ElbowRight'].head
+        bones['ikElbowLineRight'].tail = bones['ikElbowLineRight'].head - d
+    except:
+        print("adjustIKtoRig: failed to adjust ['ikElbowLineRight'] ['ElbowRight']")
+
+    try:
+        d = bones['ikElbowTargetLeft'].head - bones['ikElbowTargetLeft'].tail
+        bones['ikElbowTargetLeft'].head = bones['ikElbowLineLeft'].tail
+        bones['ikElbowTargetLeft'].tail = bones['ikElbowLineLeft'].tail - d
+    except:
+        print("adjustIKtoRig: failed to adjust ['ikElbowTargetLeft'] ['ikElbowLineLeft']")
+
+    try:
+        d = bones['ikElbowTargetRight'].head - bones['ikElbowTargetRight'].tail
+        bones['ikElbowTargetRight'].head = bones['ikElbowLineRight'].tail
+        bones['ikElbowTargetRight'].tail = bones['ikElbowLineRight'].tail - d
+    except:
+        print("adjustIKtoRig: failed to adjust ['ikElbowTargetRight'] ['ikElbowLineRight']")
+
+def SLBoneStructureRestrictStates(armobj):
+    bones  = get_structure_bones(armobj)        
+    mute_count = len([b for b in bones if b.hide_select])
+    all_count = len(bones)
+    if mute_count==all_count:
+        return 'Disabled', 'Enable'
+    if mute_count == 0:
+        return 'Enabled', 'Disable'
+    return 'Mixed', ''
+    
+        
+def setSLBoneStructureRestrictSelect(armobj, restrict):
+    bones  = get_structure_bones(armobj)
+    for bone in bones:
+        bone.hide_select     = restrict
+        if restrict:
+            bone.select      = False
+            bone.select_tail = False
+            bone.select_head = False
+        elif bone.select_tail == True and bone.select_head == True:
+            bone.select      = True
+    
+def getControlledBonePairs(armobj):
+    bones  = util.get_modify_bones(armobj)
+    bone_pairs = [[bones[b.name[1:]],b] for b in bones if b.name[0]=='m' and b.name[1:] in bones]
+    return bone_pairs
+
+def get_structure_bones(armobj):
+    bones  = util.get_modify_bones(armobj)
+    structure_bones = [b for b in bones if b.layers[B_LAYER_STRUCTURE] and b.name[0:2]!="ik"]
+    return structure_bones
+
+def get_current_toe_offset(armobj):
+    origin = armobj.location.copy()
+    M = armobj.matrix_world.copy()
+    bones = armobj.data.bones
+
+    originbone = bones['Origin']
+    toebone    = bones['mToeRight']
+
+    ohl        = originbone.head_local.copy()
+    thl        = toebone.head_local.copy()
+    diff     = thl - ohl
+    return diff
+
+def adjustRigToSL(armobj):
+    pairs = getControlledBonePairs(armobj)
+    for bone, slBone in pairs:
+        bone.head = slBone.head
+        bone.tail = slBone.tail
+        bone.roll = slBone.roll
+
+def adjustSLToRig(armobj):
+    pairs = getControlledBonePairs(armobj)
+    for bone, slBone in pairs:
+        slBone.head = bone.head
+        slBone.tail = bone.tail
+        slBone.roll = bone.roll
+
+def mesh_uses_collision_volumes(obj):
+    volbones = data.get_volume_bones()
+    for vg in obj.vertex_groups:
+        if vg.name in volbones:
+            return True
+    return False
+    
+def armature_uses_collision_volumes(arm):
+    volbones = data.get_volume_bones()
+    bones = util.get_modify_bones(arm)
+    for bone in bones:
+        if bone.use_deform and not bone.name.startswith("m") and bone.name in volbones:
+            return True
+    return False
+
+def is_collision_rig(obj):
+    if obj.type == 'MESH':
+        return mesh_uses_collision_volumes(obj)
+    else:
+        return armature_uses_collision_volumes(obj)
+
+def adjustBoneRoll(arm):
+    #1#pass
+    #2#wings = get_bones_from_layers(arm, [B_LAYER_WING, B_LAYER_HAND, B_LAYER_FACE, B_LAYER_TAIL])
+    #2#for bone in wings:
+    #2#    #if bone.name.startswith("HandThumb"):
+    #2#    #    bone.align_roll((-1,0,0))
+    #2#    #else:
+    #2#    bone.align_roll((0,0,1))
+    #2#    if bone.name.startswith("HandThumb"):
+    #2#        deg       = 45 if bone.name.endswith("Left") else -45
+    #2#        bone.roll += deg * DEGREES_TO_RADIANS
+
+def get_ik_constraint(pose_bones, bone_name, ik_bone_name):
+    iks = [con for con in pose_bones[bone_name].constraints if con.type=="IK" and con.subtarget==ik_bone_name]
+    return iks[0]
+    
+def get_ik_influence(pose_bones, bone_name, ik_bone_name):
+    try:
+        ik = get_ik_constraint(pose_bones, bone_name, ik_bone_name)
+        return ik.influence
+    except:
+        print("Could not find ik constraint in bone %s for subtarget %s" % (bone_name, ik_bone_name) )
+        return 0
+    
+def create_ik_button(row, active, layer):
+    if active == None or active.pose == None: return
+
+    pose_bones = active.pose.bones
+    text="???"
+    try:
+        if layer == B_LAYER_IK_LEGS:
+            ik = get_ik_influence(pose_bones, "KneeRight", "ikAnkleRight") + get_ik_influence(pose_bones, "KneeLeft", "ikAnkleLeft")
+            icon = "FILE_TICK" if ik == 2.0 else "BLANK1"
+            text = "IK Legs"
+            op = "karaage.ik_legs_enable"
+        elif layer == B_LAYER_IK_ARMS:
+            ik = get_ik_influence(pose_bones, "ElbowRight", "ikWristRight") + get_ik_influence(pose_bones, "ElbowLeft", "ikWristLeft")
+            icon  = "FILE_TICK" if ik  == 2.0 else "BLANK1"
+            text = "IK Arms"
+            op   = "karaage.ik_arms_enable"
+        #2#elif layer == B_LAYER_IK_HAND:
+        #2#    row.prop(active.IKSwitches,"Enable_Hands", text='', icon='CONSTRAINT_BONE')
+        #2#    if active.IKSwitches.Enable_Hands in ['FK', 'GRAB']:
+        #2#        props = row.operator("karaage.ik_apply", text='', icon='POSE_DATA')
+        #2#        props.limb='HAND'
+        #2#        props.symmetry='BOTH'
+        #2#    return
+        else:
+            icon = "BLANK1"
+    except:
+        raise
+        icon = "BLANK1"
+
+    visicon = 'RESTRICT_VIEW_OFF' if active.data.layers[layer] else 'RESTRICT_VIEW_ON'
+    row.prop(active.data, "layers", index=layer, toggle=True, text=text, icon=visicon)
+    row.operator(op, text="",icon=icon)
+
+def set_bone_rotation_limit_state(arm, state, all=False):
+    if all:
+        bones = arm.pose.bones
+    else:
+        bones = [b for b in arm.pose.bones if b.bone.select]
+
+    for b in bones:
+        for c in b.constraints:
+            if c.type =='LIMIT_ROTATION':
+                c.influence = 1 if state else 0
+                b.use_ik_limit_x = state
+                b.use_ik_limit_y = state
+                b.use_ik_limit_z = state
+
+class KaraageFaceWeightGenerator(bpy.types.Operator):
+    bl_idname      = "karaage.face_weight_generator"
+    bl_label       = "Generate Face weights"
+    bl_description = "Generate Face weights (very experimental)"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    focus = FloatProperty(name="Focus", min=0, max=1.5, default=0, description="Bone influence offset (very experimental)")
+    all    = BoolProperty(name="All Bones", default=True, description = "Weight All Face Bones except eyes and Tongue" )
+    limit  = BoolProperty(name="Limit to 4", default=True, description = "Limit Weights per vert to 4 (recommended)" )
+    gain   = FloatProperty(name="Gain", min=0, max=10, default=1, description="Weight factor(level gain)")
+    clean  = FloatProperty(name="Clean", min=0, max=1.0, description="Remove weights < this value")
+    use_mirror_x = BoolProperty(name="X Mirror", default=False, description = "Use X-Mirror" )
+    suppress_implode = BoolProperty(name="Suppress Implode", default=False, description = "Do not move the Bones back after weighting (for demonstration purposes only, please dont use!)" )
+
+    @classmethod
+    def poll(self, context):
+        obj=context.object
+        if obj != None and obj.type == 'MESH':
+            arm = util.get_armature(obj)
+            return arm != None
+        return False
+
+    @staticmethod
+    def explode(arm, use_mirror_x, full_armature=False, all_bones=True, focus=0):
+        bones=arm.data.bones
+        selects = {}
+        deforms = {}
+        offsets = {}
+
+        if all_bones:
+            for b in bones:
+                selects[b.name] = b.select
+                b.select=False
+
+        bones = {b.name:b for b in bones if full_armature or b.name.startswith('mFace') or b.name in EXTRABONES }
+        for bname, b in bones.items():
+            if bname != 'mHead':
+                #len    = focus*(b.tail-b.head).length
+                #offset = (b.head - headbone.head).normalized()*len
+                h = b.head_local
+                t = b.tail_local
+                d = t - h
+                f = focus
+                offset = Vector((d[0]*f, d[1]*f, d[2]*f))
+                b.tail_local  += offset
+                b.head_local  += offset
+                offsets[bname]=offset
+                #print("offset[%s]= Vector((%s))" % (bname, offset) )
+
+            b.select = b.select or all_bones
+            if b.select and use_mirror_x and not all_bones:
+                mirror_name = util.get_mirror_name(bname)
+                if mirror_name:
+                    bones[mirror_name].select = True
+                    #print("Mirror bone: ",mirror_name)
+
+            if bname in NONDEFORMS:
+                deforms[b.name]=b.use_deform
+                b.use_deform = False
+        return selects, deforms, offsets
+
+    @staticmethod
+    def implode(arm, full_armature, selects, deforms, offsets):
+        bones=arm.data.bones
+        for name, select in selects.items():
+            bones[name].select = select
+
+        for bname, offset in offsets.items():
+            b = bones[bname]
+            b.head_local  -= offset
+            b.tail_local  -= offset
+
+            if b.name in NONDEFORMS and b.name in deforms:
+                b.use_deform = deforms[b.name]
+
+    @staticmethod
+    def store_parameters(arm, focus, gain, clean):
+        bones=[b for b in util.get_modify_bones(arm) if b.select]
+        for b in bones:
+            b['focus']  = focus
+            b['gain']   = gain
+            b['clean']  = clean
+
+    def invoke(self, context, event):
+        self.use_mirror_x = context.object.data.use_mirror_x
+        return self.execute(context)
+
+    def execute(self, context):
+        return KaraageFaceWeightGenerator.generate(context, self.use_mirror_x, self.all, self.focus, self.gain, self.clean, self.limit, self.suppress_implode)
+
+    @staticmethod
+    def generate(context, use_mirror_x, all, focus, gain, clean, limit, suppress_implode):
+
+        obj=context.object
+        arm = util.get_armature(obj)
+        use_full_armature = not 'karaage' in arm
+
+        omode = util.ensure_mode_is("OBJECT")
+
+        bpy.context.scene.objects.active = arm
+        arm.data.pose_position="REST"
+
+        amode = util.ensure_mode_is("OBJECT")
+        selects, deforms, offsets = KaraageFaceWeightGenerator.explode(arm, use_mirror_x, full_armature=use_full_armature, all_bones=all, focus=focus)
+        util.ensure_mode_is("POSE")
+
+        bpy.context.scene.objects.active = obj
+        util.ensure_mode_is("WEIGHT_PAINT")
+        bpy.ops.paint.weight_from_bones()
+
+        bpy.ops.object.vertex_group_levels(group_select_mode='BONE_SELECT', gain=gain)
+        bpy.ops.object.vertex_group_clean(group_select_mode='BONE_SELECT', limit=clean)
+
+        if limit:
+            bpy.ops.object.vertex_group_limit_total(group_select_mode='BONE_SELECT')
+
+        bpy.context.scene.objects.active = arm
+
+        KaraageFaceWeightGenerator.store_parameters(arm, focus, gain, clean)
+
+        if suppress_implode:
+            util.ensure_mode_is("EDIT")
+        else:
+            #print("Implode...")
+            util.ensure_mode_is("OBJECT")
+            KaraageFaceWeightGenerator.implode(arm, use_full_armature, selects, deforms, offsets)        
+
+        util.ensure_mode_is(amode)
+        bpy.context.object.data.pose_position="POSE"
+
+        bpy.context.scene.objects.active = obj
+        util.ensure_mode_is(omode)
+
+        return{'FINISHED'}
+
+def get_islands(ob, minsize=1):
+    island_id    = 0
+    island_map   = {}
+    islands      = {}
+
+    def merge_islands(parts):
+        iterparts = iter(parts)
+        first= next(iterparts)
+        for part in iterparts:
+            src  = islands[part]
+            islands[first].update(src)
+            for key in src:
+                island_map[key] = first
+            islands[part].clear()
+        return first
+
+    for poly in ob.data.polygons:
+        parts = sorted({island_map[index] for index in poly.vertices if index in island_map})
+
+        if len(parts) > 0:
+            id = merge_islands(parts)
+        else:
+            id = island_id
+            islands[id] = {}
+            island_id  += 1
+
+        island = islands[id]
+        for vert in poly.vertices:
+            island_map[vert] = id
+            island[vert]=True
+            
+    return [island for island in islands.values() if len(island) >= minsize]
+
+def select_island(ob, minsize=1):
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.mesh.reveal()
+    ob.update_from_editmode()
+    
+    islands = get_islands(ob, minsize)
+    active_island = None
+    for island in islands:
+        if (active_island == None or len(island) > len(active_island)) and len(island) >= minsize:
+            active_island = island
+
+    if active_island:
+        print("Found island of size", len(active_island))
+        bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
+        for index in active_island:
+            ob.data.vertices[index].select = True
+        bpy.ops.object.mode_set(mode='EDIT', toggle=False)
+    return active_island
+    
+#2#def convert_weight_groups(obj, armature_type=SLMAP):
+#2#    for group in obj.vertex_groups:
+#2#        tgt_name = map2Karaage(group.name, type=armature_type, all=True)
+#2#        if tgt_name:
+#2#            gname = 'm' + tgt_name
+#2#            if gname in obj.vertex_groups:
+#2#                util.merge_weights(obj, group, obj.vertex_groups[gname])
+#2#                obj.vertex_groups.remove(group)
+#2#            else:
+#2#                group.name = gname
+#2#        else:
+#2#            print("    Ignore Group %s (not a manuel_lab group" % group.name )
+#2#
+#2#class KaraageFromManuelLab(bpy.types.Operator):
+#2#
+#2#    bl_idname = "karaage.convert_from_manuel_lab"
+#2#    bl_label = "Convert to Karaage"
+#2#    bl_description = "Store current Slider settings in last selected Preset"
+#2#
+#2#    def convert_weights(self, context, children):
+#2#        print("Converting %d children from Manuel_Lab to Karaage..." % len(children) )
+#2#        for ob in children:
+#2#            print("Converting %s" % ob.name)
+#2#
+#2#            if ob.type == 'MESH':
+#2#               print("ob is a MESH")
+#2#               arm = util.get_armature(ob)
+#2#               if arm and arm.get('karaage',None) is None:
+#2#                   print("ob ARMATURE %s" % arm.name)
+#2#                   bpy.context.scene.objects.active = ob
+#2#                   bpy.ops.object.parent_clear(type='CLEAR_KEEP_TRANSFORM')
+#2#                   for mod in [ mod for mod in ob.modifiers if mod.type=='ARMATURE']:
+#2#                       print("Removed Modifier %s" % mod.name)
+#2#                       bpy.ops.object.modifier_apply(modifier=mod.name)
+#2#                   context.scene.objects.unlink(arm)
+#2#                   print("deleted %s" % arm.name)
+#2#                   bpy.data.objects.remove(arm)
+#2#
+#2#            convert_weight_groups(obj, armature_type=MANUELMAP)
+#2#
+#2#    #def get_children(self, context):
+#2#    #    if context.object.type == 'ARMATURE':
+#2#    #        arm = context.object
+#2#    #        children = util.getChildren(arm, type='MESH', select=None, visible=True)
+#2#    #    else:
+#2#    #        arm = util.get_armature(context.object)
+#2#    #        if arm:
+#2#    #            children = util.getChildren(arm, type='MESH', select=True, visible=True)
+#2#    #        else:
+#2#    #            children =[context.object]
+#2#    #    return children
+#2#
+#2#    def execute(self, context):
+#2#        active = bpy.context.active_object
+#2#        children = util.get_meshes(context, type='MESH', select=True, visible=True, hidden=False)
+#2#        #children = self.get_children(context)
+#2#        self.convert_weights(context, children)
+#2#
+#2#        karaages = [arm for arm in util.get_meshes(context, type='ARMATURE', select=True, visible=True, hidden=False) if arm.get('karaage',None)]
+#2#        if len(karaages) == 0:
+#2#            karaages = [arm for arm in util.get_meshes(context, type='ARMATURE', select=None, visible=True, hidden=False) if arm.get('karaage',None)]
+#2#
+#2#        if len(karaages) == 1:
+#2#            bpy.context.scene.objects.active = karaages[0]
+#2#            select = active.select 
+#2#            active.select = True
+#2#            bpy.ops.karaage.store_bind_data()
+#2#            context.scene.MeshProp.skinSourceSelection = 'NONE'
+#2#
+#2#            from . import mesh
+#2#            mesh.parent_armature(self,
+#2#                context, karaages[0],
+#2#                type='NONE',
+#2#                clear = True,
+#2#                selected=False,
+#2#                weight_eye_bones=False,
+#2#                enforce_meshes = False )
+#2#
+#2#            bpy.ops.karaage.alter_to_restpose()
+#2#            active.select = select
+#2#
+#2#        bpy.context.scene.objects.active = active
+#2#        return {'FINISHED'}
+#2#import time
+#2#
+#2#def fix_manuel_object_name(ob):
+#2#    vcount = len(ob.data.vertices)
+#2#    #print("Manuel Lab part has %d verts" % vcount)
+#2#    try:
+#2#        name, part = ob.name.split('.')
+#2#    except:
+#2#        name= ob.name
+#2#        part = 'Brows'
+#2#    side = ''
+#2#    if   vcount == 114:   part = "Tongue"
+#2#    elif vcount == 3475:  part = "Teeth"
+#2#    elif vcount  > 10000: part = "Body"
+#2#    else:
+#2#        side = "Right" if ob.data.vertices[0].co.x < 0 else "Left"
+#2#        if   vcount == 286: part = "Eyeball"
+#2#        elif vcount == 346: part = "Iris"
+#2#        else: side = ''
+#2#    if part != '':
+#2#        ob.name = "%s.%s%s" % (name,part,side)
+#2#    ob.name = ob.name.replace("humanoid_human","avatar_")
+
+#2#def karaage_split_manuel(context, active, island_min_vcount):
+#2#    omode  = active.mode
+#2#    mesh_select_mode = util.set_mesh_select_mode((True, False, False))
+#2#    running = True
+#2#    sepcount = 0
+#2#    while running:
+#2#        context.scene.objects.active = active
+#2#        bpy.ops.object.mode_set(mode='EDIT', toggle=False)
+#2#        island = select_island(active, minsize=island_min_vcount)
+#2#        if not island:
+#2#            break
+#2#
+#2#        util.progress_update(100, absolute=False)
+#2#        #print("Separate island of length %d to islands" % len(island))
+#2#        bpy.ops.mesh.separate(type='SELECTED')
+#2#        bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
+#2#        sepcount += 1
+#2#
+#2#    bpy.ops.mesh.select_all(action='DESELECT')
+#2#    bpy.ops.object.mode_set(mode=omode, toggle=False)
+#2#    util.set_mesh_select_mode(mesh_select_mode)
+#2#    return sepcount
+#2#
+
+#2#class KaraageMergeWeights(bpy.types.Operator):
+#2#
+#2#    bl_idname = "karaage.merge_weights"
+#2#    bl_label = "Merge weights of selected to active"
+#2#    bl_description = "Try automatic weight from bones using islands"
+#2#
+#2#
+#2#    def convert_weight_groups(self, obj, active, selected):
+#2#        active_group = obj.vertex_groups[active.name]
+#2#        for bone in selected:
+#2#            bgroup = obj.vertex_groups[bone.name]
+#2#            util.merge_weights(obj, bgroup, active_group)
+#2#            obj.vertex_groups.remove(bgroup)
+#2#
+#2#    def execute(self, context):
+#2#        obj    = context.object
+#2#        arm    = util.get_armature(obj)
+#2#        bones  = util.get_modify_bones(arm)
+#2#        active = bones.active
+#2#        
+#2#        selected = [b for b in bones if b.select and not b==active and b.name in obj.vertex_groups]
+#2#        
+#2#        self.convert_weight_groups(obj, active, selected)
+#2#        return {'FINISHED'}
+
+def get_bone_location(arm=None, bone=None, bones=None, Bones=None, scaled=True):
+
+    if not arm:
+        arm=bpy.context.object
+    if not bone:
+        bone=bpy.context.active_bone
+    if not bonies:
+        bones=util.get_modify_bones(arm)
+    if not Bones:
+        Bones=data.get_reference_boneset(arm)
+    dbone=bone
+
+    Mh = Skeleton.headMatrix(bone, bones, scaled=scaled)
+    Mt = Skeleton.tailMatrix(bone, bones, Mh, scaled=scaled)
+    h  = Mh.translation
+    t  = Mt.translation
+    
+    return Mh, h, Mt, t
+
+def get_bone_recursive(posebone, ii, stopname='Pelvis'):
+    result = posebone    
+    if result.name != stopname:
+        for i in range(0,ii):
+            result = result.parent
+            if result.name == stopname:
+                break
+    return result
