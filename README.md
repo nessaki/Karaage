@@ -1,2 +1,2 @@
 # Karaage
-Tastes like chicken (Blender 2.77)
+Tastes like chicken (Blender 2.77+)
