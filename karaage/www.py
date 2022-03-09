@@ -1,10 +1,37 @@
+### Copyright     2011-2013 Magus Freston, Domino Marama, and Gaia Clary
+### Copyright     2014-2015 Gaia Clary
+### Copyright     2015      Matrice Laville
+### Copyright     2021      Machinimatrix
+### Copyright     2022      Nessaki
+###
+### Contains code from Machinimatrix Avastar™ product.
+###
+### This file is part of Karaage.
+###
+
+### The module has been created based on this document:
+### A Beginners Guide to Dual-Quaternions:
+### http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.407.9047
+###
+
+### BEGIN GPL LICENSE BLOCK #####
 #
+#  This program is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU General Public License
+#  as published by the Free Software Foundation; either version 2
+#  of the License, or (at your option) any later version.
 #
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
 #
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software Foundation,
+#  Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 #
-#
-#
-#
+# ##### END GPL LICENSE BLOCK #####
+
 
 import bpy, addon_utils
 import urllib.request, mimetypes, http, xml, os, sys, re, tempfile
@@ -21,11 +48,6 @@ def extract_host_from(url):
             split = split[1].split("/", 1)
         host = split[0]
     return host
-
-
-
-
-
 
 def call_url(self, url, supported_extensions=None):
     response = None
@@ -89,22 +111,9 @@ def create_feed_url(link, userid="", password=""):
     url = prepare_url(url)
     return url
     
-
-    
-
-
-
-
-
-
-
 def prepare_url(href, query=None):
     url = ""
     
-
-
-
-
     if sys.platform.lower().startswith("win"):
         if href[1] == ":": # is a windows file
             url = "file:///"
@@ -113,7 +122,6 @@ def prepare_url(href, query=None):
             url = "file://"
     url += href
     
-
     if not query is None and href.startswith("http"):
         hasQuery = (url.find("?") != -1)
         if not hasQuery:
@@ -125,20 +133,11 @@ def prepare_url(href, query=None):
 
     return url
 
-    
-
-
-
-
-
-
-
 def get_extension_and_name(self, response, supported_extensions=None):
 
     filename = None
     extension = None
     
-
     content_disposition = response.getheader('content-disposition')
     if not content_disposition is None:
         namep_match = self.filename_pattern.match(content_disposition)
@@ -149,13 +148,11 @@ def get_extension_and_name(self, response, supported_extensions=None):
                 extension = "." + extp_match.group(1)
         return extension, filename
     
-
     content_type = response.getheader('content-type')
     if not content_type is None:
 
         extension = mimetypes.guess_extension(content_type.lower())
           
-
         if supported_extensions == None or extension in supported_extensions:
             path = urllib.parse.urlparse(response.geturl()).path
             fn   = path.rpartition('/')[2]

@@ -4,8 +4,9 @@
 ### Copyright     2021      Machinimatrix
 ### Copyright     2022      Nessaki
 ###
-### Contains code from Machinimatrix
-### This file is part of Tamagoaki.
+### Contains code from Machinimatrix Avastar™ product.
+###
+### This file is part of Karaage.
 ###
 
 ### The module has been created based on this document:
@@ -41,7 +42,7 @@ bl_info = {
     "description": "Character creation & animation for SL and OpenSim",
     "show_expanded": True,
     "wiki_url":  "http://karaage.online/",
-    "tracker_url": "http://support.machinimatrix.org/tickets/",
+    "tracker_url": "https://discord.gg/4XfNvSfdM8",
     "category": "Object"}
 
 import os, glob, string, gettext, re
@@ -497,8 +498,8 @@ if hasattr(bpy.types, "AddonPreferences"):
             box.alignment='RIGHT'
             irow = box.row(align=False)
             irow.alignment='RIGHT'
-            irow.operator("wm.url_open", text="My Machinimatrix Account",icon='BLANK1',emboss=False).url=AVASTAR_DOWNLOAD
-            irow.operator("wm.url_open", text='',icon='INFO').url=AVASTAR_DOWNLOAD
+            irow.operator("wm.url_open", text="My Machinimatrix Account",icon='BLANK1',emboss=False).url=KARAAGE_DOWNLOAD
+            irow.operator("wm.url_open", text='',icon='INFO').url=KARAAGE_DOWNLOAD
 
             col = box.column(align=True)
 
@@ -909,7 +910,7 @@ def add_rig_preset(context, filepath):
     file_preset.write("sceneProps.karaageJointType  = '%s'\n" % sceneProps.karaageJointType)
     file_preset.close()
 
-class AVASTAR_MT_rig_presets_menu(Menu):
+class KARAAGE_MT_rig_presets_menu(Menu):
     bl_idname = "karaage_rig_presets_menu"
     bl_label  = "Rig Presets"
     bl_description = "Rig Presets for the Karaage Rig\nHere you define configurations for creating Karaage Rigs.\nYou call your configurations from the the Footer of the 3DView\nNavigate to: Add -> Karaage -> ..."
@@ -973,7 +974,7 @@ def add_shape_preset(context, filepath):
     file_preset.write("shape.fromDictionary(arm,dict)\n")
     file_preset.close()
 
-class AVASTAR_MT_shape_presets_menu(Menu):
+class KARAAGE_MT_shape_presets_menu(Menu):
     bl_idname = "karaage_shape_presets_menu"
     bl_label  = "Shape Presets"
     bl_description = "Shape Presets for the Karaage Rig"
@@ -3835,7 +3836,7 @@ class KaraageHelpMenu(bpy.types.Menu):
     def draw(self, context):
         layout = self.layout
 
-        layout.operator("wm.url_open", text="check for Update",     icon='URL').url=AVASTAR_URL   + "/update?myversion=" + util.get_addon_version() + "&myblender=" + str(util.get_blender_revision())
+        layout.operator("wm.url_open", text="check for Update",     icon='URL').url=KARAAGE_URL   + "/update?myversion=" + util.get_addon_version() + "&myblender=" + str(util.get_blender_revision())
         layout.operator("wm.url_open", text="Short Overview",       icon='URL').url=DOCUMENTATION + "/videos/"
         layout.operator("wm.url_open", text="Getting Help",         icon='URL').url=DOCUMENTATION + "/reference/getting-help/"
         layout.label("Basic tutorials:")
@@ -4499,7 +4500,7 @@ class MeshProp(bpy.types.PropertyGroup):
             ('EMPTY',      _('Empty'),     _('Add empty weight groups (keep existing weight groups untouched)')),
             ('AUTOMATIC',  _('Bones'),     _('Generate weights from Bones (most commonly used, works out of the box)')),
             ('COPY',       _('Meshes'),    _('Copy weights from other visible Meshes rigged to same Armature')),
-            ('AVASTAR',    _('Karaage'),   _('Copy weights from Karaage head, upper body and lower body\neven if the Karaage meshes are not visible.'))),
+            ('KARAAGE',    _('Karaage'),   _('Copy weights from Karaage head, upper body and lower body\neven if the Karaage meshes are not visible.'))),
         name=_("Weights"),
         description=_("From where to get the initial weight data"),
         default='COPY')
@@ -4510,7 +4511,7 @@ class MeshProp(bpy.types.PropertyGroup):
             ('EMPTY',      _('Create Empty Groups'),   _('Add empty weight groups (keep existing weight groups untouched)')),
             ('AUTOMATIC',  _('Automatic from Bones'),  _('Generate weights from Bones (most commonly used, works out of the box)')),
             ('COPY',       _('Copy from Meshes'),      _('Copy weights from all visible Meshes parented to same Armature')),
-            ('AVASTAR',    _('Copy from Karaage'),     _('Copy weights from Karaage meshes.')),
+            ('KARAAGE',    _('Copy from Karaage'),     _('Copy weights from Karaage meshes.')),
             ('EXTENDED',   _('Copy from Extended'),    _('Copy weights from Extended weightmaps.')),
             ('SWAP',       _('Swap Weight Groups'),    _('Swap Weights of Collision Volumes with corresponding SL Bones.\nHandle with care')),
             ('FACEGEN', _('Face Map Generator'),    _('Generate Head Weight Maps. Works only on head bones (face bones)!.\nPlease use the Operator panel to tweak the values!\nHandle with care')),
@@ -4629,10 +4630,10 @@ into account. You may optionally want to set the sliders to SL Restpose
             (SLMAP,      SLMAP,      'Second Life Base Rig\n\nWe assume the character looks towards positive X\nwhich means it looks to the right side when in front view'),
             (MANUELMAP,  MANUELMAP,  'Manuel Bastioni Rig\n\nWe assume the character has been imported directly from Manuellab and has not changed.'),
             (GENERICMAP, GENERICMAP, 'Generic Rig\n\nWe assume the character looks towards negative Y\nwhich means it looks at you when in Front view'),
-            (AVASTARMAP, AVASTARMAP, 'Karaage Rig\n\nThe character is already rigged to an Karaage Rig\nNote: Do not use this option unless you have been instructed to set it'),
+            (KARAAGEMAP, KARAAGEMAP, 'Karaage Rig\n\nThe character is already rigged to an Karaage Rig\nNote: Do not use this option unless you have been instructed to set it'),
         ),
         name="Source Rig",
-        description="Rig Type of the active Object, can be AVASTAR, MANUELLAB, SL or Generic",
+        description="Rig Type of the active Object, can be KARAAGE, MANUELLAB, SL or Generic",
         default='SL')
 
     tgtRigType = EnumProperty(

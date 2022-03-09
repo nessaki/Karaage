@@ -1,12 +1,37 @@
+### Copyright     2011-2013 Magus Freston, Domino Marama, and Gaia Clary
+### Copyright     2014-2015 Gaia Clary
+### Copyright     2015      Matrice Laville
+### Copyright     2021      Machinimatrix
+### Copyright     2022      Nessaki
+###
+### Contains code from Machinimatrix Avastar™ product.
+###
+### This file is part of Karaage.
+###
+
+### The module has been created based on this document:
+### A Beginners Guide to Dual-Quaternions:
+### http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.407.9047
+###
+
+### BEGIN GPL LICENSE BLOCK #####
 #
+#  This program is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU General Public License
+#  as published by the Free Software Foundation; either version 2
+#  of the License, or (at your option) any later version.
 #
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
 #
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software Foundation,
+#  Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 #
-#
-#
-#
-#
-#
+# ##### END GPL LICENSE BLOCK #####
+
 
 import os, re, bpy, logging
 from .messages import *
@@ -25,27 +50,27 @@ LL_MAX_PELVIS_OFFSET = 5.0
 
 BLtoBVH = Matrix.Rotation(-pi/2, 4, 'X')
 
-AVASTAR_RIG_ID = 5
+KARAAGE_RIG_ID = 5
 
-BENTOBOX        = "https://github.com/nessaki/Karaage"
+BENTOBOX        = "https://github.com/nessaki"
 DOCUMENTATION        = "https://github.com/nessaki/Karaage/wiki"
-TICKETS              = BENTOBOX + "/issues"
+TICKETS              = BENTOBOX + "/karaage/issues"
 TOOL_PARAMETER       = "addon=karaage-%s.%s.%s" % bl_info['version']
 
-AVASTAR_COLLADA      = BENTOBOX + "/karaage/help/export_mesh/"
-AVASTAR_SKINNING     = BENTOBOX + "/karaage/help/skinning/"
-AVASTAR_POSING       = BENTOBOX + "/karaage/help/posing/"
-AVASTAR_RIGGING      = BENTOBOX + "/karaage/help/rigging/"
-AVASTAR_FITTING      = BENTOBOX + "/karaage/help/fitting/"
-AVASTAR_TOOLS        = BENTOBOX + "/karaage/help/karaage-tools/"
-AVASTAR_SHAPE        = BENTOBOX + "/karaage/help/karaage_shapes/"
-HELP_PAGE            = BENTOBOX + "/karaage/help/"
-AVASTAR_URL          = BENTOBOX + "/karaage"
-AVASTAR_FORUM        = BENTOBOX + "/forum/stars/karaage-1/"
-AVASTAR_REGISTER     = BENTOBOX + "/register-download-page/"
-AVASTAR_DOWNLOAD     = BENTOBOX + "/my-account/products/"
+KARAAGE_COLLADA      = BENTOBOX + "/karaage/wiki/exporting-mesh/"
+KARAAGE_SKINNING     = BENTOBOX + "/karaage/wiki/skinning/"
+KARAAGE_POSING       = BENTOBOX + "/karaage/wiki/posing/"
+KARAAGE_RIGGING      = BENTOBOX + "/karaage/wiki/rigging/"
+KARAAGE_FITTING      = BENTOBOX + "/karaage/wiki/fitting/"
+KARAAGE_TOOLS        = BENTOBOX + "/karaage/wiki/karaage-tools/"
+KARAAGE_SHAPE        = BENTOBOX + "/karaage/wiki/karaage_shapes/"
+HELP_PAGE            = BENTOBOX + "/karaage/wiki/"
+KARAAGE_URL          = BENTOBOX + "/karaage"
+KARAAGE_FORUM        = "https://discord.gg/4XfNvSfdM8"
+KARAAGE_REGISTER     = BENTOBOX + "/register-download-page/"
+KARAAGE_DOWNLOAD     = BENTOBOX + "/karaage/releases"
 XMLRPC_SERVICE       = BENTOBOX + "/xmlrpc.php"
-RELEASE_INFO         = BENTOBOX + "/karaage/update/"
+RELEASE_INFO         = BENTOBOX + "/karaage/releases"
 LINDEN_BUG_EXPLAINED = BENTOBOX + "/karaage/help/linden-bugs-explained/#shape_keys"
 
 LOCALE_DIR     = os.path.join(os.path.dirname(__file__), 'locale')
@@ -781,7 +806,7 @@ HOVER_POINTS  = ['COG', 'Pelvis', 'mPelvis']
 SLMAP = 'SL'
 MANUELMAP = 'MANUELLAB'
 GENERICMAP = 'GENERIC'
-AVASTARMAP = 'AVASTAR'
+KARAAGEMAP = 'KARAAGE'
 
 MANUEL2Karaage = {
 "upperarm_L" : "ShoulderLeft",

@@ -1,11 +1,37 @@
+### Copyright     2011-2013 Magus Freston, Domino Marama, and Gaia Clary
+### Copyright     2014-2015 Gaia Clary
+### Copyright     2015      Matrice Laville
+### Copyright     2021      Machinimatrix
+### Copyright     2022      Nessaki
+###
+### Contains code from Machinimatrix Avastar™ product.
+###
+### This file is part of Karaage.
+###
+
+### The module has been created based on this document:
+### A Beginners Guide to Dual-Quaternions:
+### http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.407.9047
+###
+
+### BEGIN GPL LICENSE BLOCK #####
 #
+#  This program is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU General Public License
+#  as published by the Free Software Foundation; either version 2
+#  of the License, or (at your option) any later version.
 #
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
 #
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software Foundation,
+#  Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 #
-#
-#
-#
-#
+# ##### END GPL LICENSE BLOCK #####
+
 
 import bpy, bmesh, sys, logging
 from bpy.props import *
@@ -607,10 +633,10 @@ into account. You may optionally want to set the sliders to SL Restpose
             (SLMAP,      SLMAP,      'Second Life Base Rig\n\nWe assume the character looks towards positive X\nwhich means it looks to the right side when in front view'),
             (MANUELMAP,  MANUELMAP,  'Manuel Bastioni Rig\n\nWe assume the character has been imported directly from Manuellab and has not changed.'),
             (GENERICMAP, GENERICMAP, 'Generic Rig\n\nWe assume the character looks towards negative Y\nwhich means it looks at you when in Front view'),
-            (AVASTARMAP, AVASTARMAP, 'Karaage Rig\n\nThe character is already rigged to an Karaage Rig\nNote: Do not use this option unless you have been instructed to set it'),
+            (KARAAGEMAP, KARAAGEMAP, 'Karaage Rig\n\nThe character is already rigged to an Karaage Rig\nNote: Do not use this option unless you have been instructed to set it'),
         ),
         name="Source Rig",
-        description="Rig Type of the active Object, can be AVASTAR, MANUELLAB, SL or Generic",
+        description="Rig Type of the active Object, can be KARAAGE, MANUELLAB, SL or Generic",
         default='SL')
 
     tgtRigType = EnumProperty(
@@ -721,7 +747,7 @@ into account. You may optionally want to set the sliders to SL Restpose
     use_all_sources  = False
 
     def draw(self, context):
-        if self.inplace_transfer == False or self.srcRigType != 'AVASTAR':
+        if self.inplace_transfer == False or self.srcRigType != 'KARAAGE':
             ButtonCopyKaraage.draw_generic(self, context, self.layout, self.src_armature, self.targets)
 
     @staticmethod
@@ -747,7 +773,7 @@ into account. You may optionally want to set the sliders to SL Restpose
 
         if "karaage"  in src_armature:
             title = "Update Tool"
-            srcRigType = 'AVASTAR'
+            srcRigType = 'KARAAGE'
             need_pelvis_fix = rig.needPelvisInvFix(src_armature)
             need_rig_fix = rig.needRigFix(src_armature)
         else:
@@ -770,11 +796,11 @@ into account. You may optionally want to set the sliders to SL Restpose
         armobj = context.active_object
         col = box.column(align=True)
         if 'karaage' in armobj:
-            col.label("Source Rig: AVASTAR")
+            col.label("Source Rig: KARAAGE")
         else:
             col.prop(updateRigProp, "srcRigType")
 
-        if srcRigType =='AVASTAR' and not 'karaage' in armobj:
+        if srcRigType =='KARAAGE' and not 'karaage' in armobj:
             col   = box.column(align=True)
             col.label("Source rig is not Karaage",icon='ERROR')
             col.label("You Reimport an Karaage?", icon='BLANK1')
@@ -786,7 +812,7 @@ into account. You may optionally want to set the sliders to SL Restpose
             col.prop(updateRigProp, "tgtRigType")
             col   = box.column()
 
-        if op or len(targets) > 0 or srcRigType!='AVASTAR':
+        if op or len(targets) > 0 or srcRigType!='KARAAGE':
         
             if True:#len(targets) == 0:
 
@@ -795,7 +821,7 @@ into account. You may optionally want to set the sliders to SL Restpose
                 split.prop(updateRigProp, "handleTargetMeshSelection", text="", toggle=False)
                 col  = box.column()
 
-            if srcRigType == 'AVASTAR':
+            if srcRigType == 'KARAAGE':
                 col.prop(updateRigProp, "transferMeshes")
             else:
                 ibox = col.box()
@@ -1805,9 +1831,9 @@ into account. You may optionally want to set the sliders to SL Restpose
         else:
             self.rig_display_type = 'ALL'
 
-        self.srcRigType = 'AVASTAR' if 'karaage' in self.src_armature else self.srcRigType
+        self.srcRigType = 'KARAAGE' if 'karaage' in self.src_armature else self.srcRigType
 
-        if self.srcRigType == 'AVASTAR':
+        if self.srcRigType == 'KARAAGE':
             shape.ensure_drivers_initialized(self.src_armature)
             self.sl_bone_ends = False
             self.pose_library = self.src_armature.pose_library
@@ -1885,7 +1911,7 @@ into account. You may optionally want to set the sliders to SL Restpose
         tgt_armatures = None
         tgt_armature = None
 
-        if self.srcRigType != 'AVASTAR':
+        if self.srcRigType != 'KARAAGE':
             log.info("Converting an SL Armature to Karaage: [%s]" % self.src_armature.name)
             tgt_armature = convert_sl(
                 self,
@@ -2015,7 +2041,7 @@ def add_transfer_preset(context, filepath):
 
     file_preset.close()
 
-class AVASTAR_MT_transfer_presets_menu(Menu):
+class KARAAGE_MT_transfer_presets_menu(Menu):
     bl_idname = "karaage_transfer_presets_menu"
     bl_label  = "Transfer Presets"
     bl_description = "Transfer Presets for Karaage\nHere you define configurations for updating/importing Rigs."

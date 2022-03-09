@@ -1,11 +1,37 @@
+### Copyright     2011-2013 Magus Freston, Domino Marama, and Gaia Clary
+### Copyright     2014-2015 Gaia Clary
+### Copyright     2015      Matrice Laville
+### Copyright     2021      Machinimatrix
+### Copyright     2022      Nessaki
+###
+### Contains code from Machinimatrix Avastar™ product.
+###
+### This file is part of Karaage.
+###
+
+### The module has been created based on this document:
+### A Beginners Guide to Dual-Quaternions:
+### http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.407.9047
+###
+
+### BEGIN GPL LICENSE BLOCK #####
 #
+#  This program is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU General Public License
+#  as published by the Free Software Foundation; either version 2
+#  of the License, or (at your option) any later version.
 #
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
 #
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software Foundation,
+#  Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 #
-#
-#
-#
-#
+# ##### END GPL LICENSE BLOCK #####
+
 import bpy, bmesh, sys
 import logging, gettext, os, time, re, shutil
 import addon_utils
@@ -28,7 +54,7 @@ class PanelWorkflow(bpy.types.Panel):
     bl_options     = {'DEFAULT_CLOSED'}
 
     def draw_header(self, context):
-        util.draw_info_header(self.layout.row(), AVASTAR_SKINNING, msg=panel_info_workflow)
+        util.draw_info_header(self.layout.row(), KARAAGE_SKINNING, msg=panel_info_workflow)
 
     def draw(self, context):
 
@@ -268,7 +294,7 @@ class PanelShaping(bpy.types.Panel):
     def draw_header(self, context):
         sceneProps = context.scene.SceneProp
         row = self.layout.row(align=True)
-        util.draw_info_header(row, AVASTAR_SHAPE, msg=panel_info_appearance, op=sceneProps, is_enabled="panel_appearance_enabled")
+        util.draw_info_header(row, KARAAGE_SHAPE, msg=panel_info_appearance, op=sceneProps, is_enabled="panel_appearance_enabled")
 
     def draw(self, context):
         armobj = util.get_armature(context.active_object)
@@ -363,7 +389,7 @@ class PanelRigDisplay(bpy.types.Panel):
             return False
 
     def draw_header(self, context):
-        util.draw_info_header(self.layout.row(), AVASTAR_RIGGING, msg=panel_info_rigging)
+        util.draw_info_header(self.layout.row(), KARAAGE_RIGGING, msg=panel_info_rigging)
 
     def draw(self, context):
 
@@ -439,7 +465,7 @@ class PanelRiggingConfig(bpy.types.Panel):
             return False
 
     def draw_header(self, context):
-        util.draw_info_header(self.layout.row(), AVASTAR_RIGGING, msg=panel_info_rigging)
+        util.draw_info_header(self.layout.row(), KARAAGE_RIGGING, msg=panel_info_rigging)
 
     def draw(self, context):
 
@@ -602,7 +628,7 @@ class PanelRigJointOffsets(bpy.types.Panel):
             return False
 
     def draw_header(self, context):
-        util.draw_info_header(self.layout.row(), AVASTAR_RIGGING, msg=panel_info_rigging)
+        util.draw_info_header(self.layout.row(), KARAAGE_RIGGING, msg=panel_info_rigging)
 
     def draw(self, context):
         layout = self.layout
@@ -648,7 +674,7 @@ class PanelSkinning(bpy.types.Panel):
             return None
             
     def draw_header(self, context):
-        util.draw_info_header(self.layout.row(), AVASTAR_SKINNING, msg=panel_info_skinning)
+        util.draw_info_header(self.layout.row(), KARAAGE_SKINNING, msg=panel_info_skinning)
 
     def check_bindable(self, detached):
         state = 0
@@ -755,7 +781,7 @@ class PanelSkinning(bpy.types.Panel):
                         col.prop(scn.MeshProp, "copyWeightsSelected", toggle=False)
                         col.prop(scn.MeshProp, "weight_eye_bones", toggle=False)
 
-                    if scn.MeshProp.skinSourceSelection in ['COPY', 'AVASTAR']:
+                    if scn.MeshProp.skinSourceSelection in ['COPY', 'KARAAGE']:
                         col = box.column(align=True)
                         col.prop(scn.MeshProp, "submeshInterpolation", toggle=False)
 
@@ -850,7 +876,7 @@ class PanelPosing(bpy.types.Panel):
             return False
 
     def draw_header(self, context):
-        util.draw_info_header(self.layout.row(), AVASTAR_SKINNING, msg=panel_info_posing)
+        util.draw_info_header(self.layout.row(), KARAAGE_SKINNING, msg=panel_info_posing)
 
     def draw(self, context):
 
@@ -874,7 +900,7 @@ class PanelPosing(bpy.types.Panel):
         rts = rigtype[0].upper() + rigtype[1:].lower()
         label ="%s (%s)" % (rts,mod)
         row = layout.row(align=True)
-        util.draw_info_header(row, AVASTAR_TOOLS, msg=msg)
+        util.draw_info_header(row, KARAAGE_TOOLS, msg=msg)
         row.label(label)
 
         if ui_level > UI_SIMPLE:
@@ -1034,7 +1060,7 @@ class PanelFitting(bpy.types.Panel):
         mesh.ButtonGenerateWeights.draw_fitting_section(context, self.layout)
 
     def draw_header(self, context):
-        util.draw_info_header(self.layout.row(), AVASTAR_FITTING, msg=panel_info_fitting)
+        util.draw_info_header(self.layout.row(), KARAAGE_FITTING, msg=panel_info_fitting)
 
 class PanelAvatarShape(bpy.types.Panel):
     '''
@@ -1068,7 +1094,7 @@ class PanelAvatarShape(bpy.types.Panel):
         else:
             icon = 'NONE'
             msg = panel_info_appearance
-        util.draw_info_header(row, AVASTAR_SHAPE, msg=msg, icon=icon)
+        util.draw_info_header(row, KARAAGE_SHAPE, msg=msg, icon=icon)
 
     def draw(self, context):
         PanelShaping.draw_generic(self, context, context.active_object, self.layout)
@@ -1204,7 +1230,7 @@ class PanelKaraageTool(bpy.types.Panel):
         return True
 
     def draw_header(self, context):
-        util.draw_info_header(self.layout.row(), AVASTAR_TOOLS, msg=panel_info_tools)
+        util.draw_info_header(self.layout.row(), KARAAGE_TOOLS, msg=panel_info_tools)
         
     def draw(self, context):
 
@@ -1371,7 +1397,7 @@ class PanelCustomExport(bpy.types.Panel):
             return False
 
     def draw_header(self, context):
-        util.draw_info_header(self.layout.row(), AVASTAR_COLLADA, msg=panel_info_collada)
+        util.draw_info_header(self.layout.row(), KARAAGE_COLLADA, msg=panel_info_collada)
 
     def draw(self, context):
         layout = self.layout
@@ -1422,7 +1448,7 @@ class ArmatureInfo(bpy.types.Panel):
         col    = box.column(align=True)
         row    = col.row(align=True)       
         row.operator("karaage.display_version_operator", text="Karaage", emboss=False)
-        row.operator("karaage.display_version_operator", text="%s(%s)" %(karaage_version, AVASTAR_RIG_ID), emboss=False)
+        row.operator("karaage.display_version_operator", text="%s(%s)" %(karaage_version, KARAAGE_RIG_ID), emboss=False)
 
         if rig_version != None:
             row    = col.row(align=True)
@@ -1538,7 +1564,7 @@ class PanelMeshInfo(bpy.types.Panel):
         return False
         
     def draw_header(self, context):
-        util.draw_info_header(self.layout.row(), AVASTAR_RIGGING, msg=panel_info_mesh)
+        util.draw_info_header(self.layout.row(), KARAAGE_RIGGING, msg=panel_info_mesh)
 
     def draw(self, context):
     
@@ -1808,7 +1834,7 @@ class PanelKaraageUpdate(bpy.types.Panel):
         return True
 
     def draw_header(self, context):
-        util.draw_info_header(self.layout.row(), AVASTAR_DOWNLOAD, msg=panel_info_register)
+        util.draw_info_header(self.layout.row(), KARAAGE_DOWNLOAD, msg=panel_info_register)
 
     def draw(self, context):
 
@@ -1889,8 +1915,8 @@ class PanelKaraageUpdate(bpy.types.Panel):
         
         wlabel = "Welcome, %s" % addonProps.user.replace("+"," ") if addonProps.user != '' else "My Machinimatrix Account"
         
-        row.operator("wm.url_open", text=wlabel, icon='NONE', emboss=False).url=AVASTAR_DOWNLOAD
-        row.operator("wm.url_open", text="",icon='INFO',emboss=False).url=AVASTAR_DOWNLOAD
+        row.operator("wm.url_open", text=wlabel, icon='NONE', emboss=False).url=KARAAGE_DOWNLOAD
+        row.operator("wm.url_open", text="",icon='INFO',emboss=False).url=KARAAGE_DOWNLOAD
         
         col = box.column(align=True)
         col.prop(addonProps,"username",  emboss = not is_logged_in)

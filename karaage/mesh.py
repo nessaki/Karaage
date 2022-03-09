@@ -1,11 +1,37 @@
+### Copyright     2011-2013 Magus Freston, Domino Marama, and Gaia Clary
+### Copyright     2014-2015 Gaia Clary
+### Copyright     2015      Matrice Laville
+### Copyright     2021      Machinimatrix
+### Copyright     2022      Nessaki
+###
+### Contains code from Machinimatrix Avastar™ product.
+###
+### This file is part of Karaage.
+###
+
+### The module has been created based on this document:
+### A Beginners Guide to Dual-Quaternions:
+### http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.407.9047
+###
+
+### BEGIN GPL LICENSE BLOCK #####
 #
+#  This program is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU General Public License
+#  as published by the Free Software Foundation; either version 2
+#  of the License, or (at your option) any later version.
 #
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
 #
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software Foundation,
+#  Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 #
-#
-#
-#
-#
+# ##### END GPL LICENSE BLOCK #####
+
 
 import bpy, bmesh, sys
 from mathutils import Vector, Matrix
@@ -336,7 +362,7 @@ class PanelAvatarShapeIO(bpy.types.Panel):
         col.operator("karaage.delete_all_shapes", icon="X")
 
     def draw_header(self, context):
-        util.draw_info_header(self.layout.row(), AVASTAR_SHAPE, msg=panel_info_appearance)
+        util.draw_info_header(self.layout.row(), KARAAGE_SHAPE, msg=panel_info_appearance)
 
     def draw(self, context):
         PanelAvatarShapeIO.draw_generic(self, context, context.active_object, self.layout)
@@ -598,11 +624,11 @@ class ButtonGenerateWeights(bpy.types.Operator):
             col.prop(op, "clearTargetWeights", toggle=False)
             col.prop(op, "copyWeightsSelected", toggle=False)
 
-        if op.weightSourceSelection in ['COPY','AVASTAR', 'EXTENDED']:
+        if op.weightSourceSelection in ['COPY','KARAAGE', 'EXTENDED']:
             col = box.column(align=True)
             col.prop(op, "submeshInterpolation", toggle=False)
             
-            if op.weightSourceSelection in ['EXTENDED', 'AVASTAR']:
+            if op.weightSourceSelection in ['EXTENDED', 'KARAAGE']:
                 box = box.box()
                 box.label(text=_("Weights from Karaage"), icon='GROUP_VERTEX')
                 col = box.column(align=True)
@@ -614,7 +640,7 @@ class ButtonGenerateWeights(bpy.types.Operator):
                 col.prop(op, "with_skirt",      text="skirt",      toggle=False)
 
     def with_meshes(self, context, type):
-        if type in ['AVASTAR', 'EXTENDED']:
+        if type in ['KARAAGE', 'EXTENDED']:
             result = []
             props = context.scene.MeshProp
             if props.with_hair:       result.append("hairMesh")
@@ -1815,7 +1841,7 @@ def create_weight_groups(
 
             c = util.removeEmptyWeightGroups(target)
 
-    elif type in ['AVASTAR', 'COPY']:
+    elif type in ['KARAAGE', 'COPY']:
 
         armobj = util.get_armature(target)
         weight_sources = util.getChildren(armobj, type="MESH")
@@ -1977,7 +2003,7 @@ class ButtonParentArmature(bpy.types.Operator):
 
             meshProps = context.scene.MeshProp
 
-            if self.type == 'AVASTAR':
+            if self.type == 'KARAAGE':
                 enforce_meshes = ["headMesh", "lowerBodyMesh", "upperBodyMesh"]
             else:
                 enforce_meshes = None
@@ -2888,7 +2914,7 @@ class UpdateKaraagePopup(bpy.types.Operator):
             joint_count = len(armobj.get('sl_joints',[]))
             col_bone.column().label("%d" % joint_count)
 
-            if rig_id != AVASTAR_RIG_ID and karaage_version != rig_version:
+            if rig_id != KARAAGE_RIG_ID and karaage_version != rig_version:
                 col_stat.column().label("Update recommended")
             else:
                 col_stat.column().label("Update optional")
