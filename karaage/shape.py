@@ -2073,7 +2073,7 @@ def setHands(obj, scene):
     arm = util.get_armature(obj)
     props = arm.RigProps
 
-    if "karaage" in obj:
+    if "karaage" in obj or "avastar" in obj:
 
         meshes = util.findKaraageMeshes(obj)
         if 'upperBodyMesh' in meshes:

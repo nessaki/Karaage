@@ -2518,8 +2518,9 @@ to the edited Control Rig.'''
         try:    
             active = context.active_object 
             rig.reset_cache(active, full=True)
-            if "karaage" in active and self.adjust_pelvis and rig.needPelvisInvFix(active):
-                rig.matchPelvisInvToPelvis(context, active, alignToDeform=False)
+            if "karaage" in active or "avastar" in active:
+                if self.adjust_pelvis and rig.needPelvisInvFix(active):
+                    rig.matchPelvisInvToPelvis(context, active, alignToDeform=False)
             
             if self.fix_base_bones:
                 rig.adjustRigToSL(active) if self.base_to_rig else rig.adjustSLToRig(active)

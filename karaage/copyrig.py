@@ -771,7 +771,7 @@ into account. You may optionally want to set the sliders to SL Restpose
         else:
             updateRigProp = scene.UpdateRigProp
 
-        if "karaage"  in src_armature:
+        if "karaage"  in src_armature or "avastar" in src_armature:
             title = "Update Tool"
             srcRigType = 'KARAAGE'
             need_pelvis_fix = rig.needPelvisInvFix(src_armature)
@@ -853,7 +853,7 @@ into account. You may optionally want to set the sliders to SL Restpose
             nicon = None
             note = None
             if len(targets) == 0:
-                if "karaage" in src_armature:
+                if "karaage" in src_armature or "avastar" in src_armature:
                     karaage_version, rig_version, rig_id, rig_type = util.get_version_info(src_armature)
 
                     if repair:
@@ -952,7 +952,7 @@ into account. You may optionally want to set the sliders to SL Restpose
             props = row.operator(ButtonCopyKaraage.bl_idname, text=label)
             row.prop(updateRigProp,"apply_pose", icon='FREEZE', text='')
 
-            if "karaage" in src_armature:
+            if "karaage" in src_armature or "avastar" in src_armature:
                 pass
             else:
                 props.srcRigType    = updateRigProp.srcRigType
@@ -1623,8 +1623,9 @@ into account. You may optionally want to set the sliders to SL Restpose
             origin = bones.get("Origin")
             origin_mismatch = origin != None and Vector(origin.head).magnitude > MIN_JOINT_OFFSET
 
-            if "karaage" in src_armature and self.adjust_pelvis and rig.needPelvisInvFix(src_armature):
-                rig.matchPelvisInvToPelvis(context, src_armature, alignToDeform=self.align_to_deform)
+            if "karaage" in src_armature or "avastar" in src_armature:
+                if self.adjust_pelvis and rig.needPelvisInvFix(src_armature):
+                    rig.matchPelvisInvToPelvis(context, src_armature, alignToDeform=self.align_to_deform)
 
             children    = util.getChildren(src_armature)
             if origin_mismatch:
@@ -1747,16 +1748,17 @@ into account. You may optionally want to set the sliders to SL Restpose
                             tbone.tail = ebone.tail
                             log.debug("Adjusted bone %s to imported bone %s" % (tbone.name, ebone.name) )
 
-            if "karaage" in src_armature and self.adjust_rig and rig.needRigFix(src_armature):
+            if "karaage" in src_armature or "avastar" in src_armature:
+                if self.adjust_rig and rig.needRigFix(src_armature):
 
-                rig.adjustAvatarCenter(tgt_armature)
-                rig.adjustSLToRig(tgt_armature) if self.align_to_rig == 'DEFORM_TO_ANIMATION' else rig.adjustRigToSL(tgt_armature)
-                rig.adjustIKToRig(tgt_armature)
+                    rig.adjustAvatarCenter(tgt_armature)
+                    rig.adjustSLToRig(tgt_armature) if self.align_to_rig == 'DEFORM_TO_ANIMATION' else rig.adjustRigToSL(tgt_armature)
+                    rig.adjustIKToRig(tgt_armature)
 
-                if self.snap_collision_volumes:
-                    rig.adjustVolumeBonesToRig(tgt_armature)
-                if self.snap_attachment_points:
-                    rig.adjustAttachmentBonesToRig(tgt_armature)
+                    if self.snap_collision_volumes:
+                        rig.adjustVolumeBonesToRig(tgt_armature)
+                    if self.snap_attachment_points:
+                        rig.adjustAttachmentBonesToRig(tgt_armature)
 
             sync = False
 

@@ -270,17 +270,41 @@ if hasattr(bpy.types, "AddonPreferences"):
             default='WARNING',
             update = configure_log_level)
             
+        _username = config.get("credentials","user", fallback="")
+        _password = config.get("credentials","pwd",  fallback="")
+
+        username       = StringProperty(
+            name       = 'User',
+            description=_("Not Used"),
+            default    =_username)
+
+        password       = StringProperty(
+            name       = 'Pwd',
+            subtype='PASSWORD',
+            description=_("Not Used"),
+            default    =_password)
+            
+        keep_cred       = BoolProperty(
+            name        = "Keep Credentials",
+            description = "Keep login Credentials on local file for reuse on next start of Blender",
+            default     = _username != '')
+
         server       = StringProperty(
             description=_("Server"))
         page       = StringProperty(
             description=_("Page"))
 
+        user       = StringProperty(
+            description=_("User"))
+        purchase       =  StringProperty(
+            description=_("Your Account name on the  website"))
         version       =  StringProperty(
             description=_("Version"))
 
         update_status  = EnumProperty(
             items=(
-                ('BROKEN', _('Broken'), _('We could not setup the Remote caller on your system.\nPlease visit the Machinimatrix website and\ncheck manually for new updates.')),
+                ('BROKEN', _('Broken'), _('We could not setup the Remote caller on your system.\nPlease visit the website and\ncheck manually for new updates.')),
+                ('UNKNOWN', _('Unknown'), _('You need to Login at  at least Check for Updates to see your update status')),
                 ('UPTODATE', _('Up to date'), _('You seem to have already installed the newest product version')),
                 ('ONLINE', _('Up to date'), _('You have already installed the newest product version')),
                 ('CANUPDATE', _('Can Update'), _('A newer product version is available (Please login to get the download)')),
@@ -427,6 +451,24 @@ if hasattr(bpy.types, "AddonPreferences"):
             description="Show the Appearance Slider Panel in the Tool Shelf"
             )
 
+        def store_credentials(self):
+            print("Storing configuration")
+            cp = self.config
+            print("Set credentials")
+
+            if self.keep_cred:
+                cp.set("credentials","user", self.username)
+                cp.set("credentials","pwd", self.password)
+            else:
+                cp.remove_option("credentials","user")
+                cp.remove_option("credentials","pwd")
+
+            print("store credentials")
+            with open(self.config_file, 'w+') as configfile:
+                print("user:", cp.get("credentials","user", fallback="none"))
+                cp.write(configfile)
+                print("Done")
+                
         def draw_create_panel(self, context, box):
         
             from . import SceneProp
@@ -498,14 +540,9 @@ if hasattr(bpy.types, "AddonPreferences"):
             box.alignment='RIGHT'
             irow = box.row(align=False)
             irow.alignment='RIGHT'
-            irow.operator("wm.url_open", text="My Machinimatrix Account",icon='BLANK1',emboss=False).url=KARAAGE_DOWNLOAD
             irow.operator("wm.url_open", text='',icon='INFO').url=KARAAGE_DOWNLOAD
 
-            col = box.column(align=True)
-
-            col.prop(self,"username", text="user")
-            col.prop(self,"password", text="password")
-            col.label("")
+          
 
             layout.separator()
                         
@@ -720,32 +757,7 @@ class CreateReport(bpy.types.Operator):
     bl_description = "Create a Report and send the data to the GitHub"
 
     def execute(self, context):
-        import webbrowser
-        addonProps = util.getAddonPreferences()
-        user            = addonProps.username
-        pwd             = addonProps.password
-
-        product_name    = product_id_map[addonProps.productName]
-        addon_version   = addonProps.addonVersion
-        blender_version = addonProps.blenderVersion
-        ticket_type     = addonProps.ticketTypeSelection
-        operating_system= addonProps.operatingSystem
-
-        import urllib
-        page = "/karaage/tickets/?wpas_product=%s&wpas_mama_version_number=%s&wpas_mama_blender_version=%s&wpas_mama_ticket_type=%s&wpas_mama_operating_system=%s" % (
-               product_name, 
-               addon_version,
-               blender_version, 
-               ticket_type,
-               operating_system
-        )
-        page = urllib.parse.quote_plus('page:%s'%page)
-
-        url = ("http://blog.machinimatrix.org/wp-login.php?log=%s&pwd=%s&%s" % (user, pwd, page)).replace("page%3A","page=")
-        new = 2
-
-        print("Open page [%s]" % url )
-        webbrowser.open(url,new=new)
+        
         return {'FINISHED'}
 
 class CheckForUpdates(bpy.types.Operator):
@@ -765,8 +777,8 @@ class CheckForUpdates(bpy.types.Operator):
 
         service = xmlrpc.client.ServerProxy(XMLRPC_SERVICE)
 
-        user            = addonProps.username
-        pwd             = addonProps.password
+        user            = addonProps.addonVersion
+        pwd             = addonProps.addonVersion
 
         addon_version   = util.get_addon_version()
         blender_version = str(util.get_blender_revision())
@@ -882,7 +894,7 @@ class PanelAvatarMaterials(bpy.types.Panel):
         obj = context.active_object
         scn = context.scene
         try:
-            if "karaage" in obj:
+            if "karaage" in obj or "avastar" in obj:
 
                 currentmeshes = util.findKaraageMeshes(obj)
                 if len(currentmeshes)>0:
@@ -1530,7 +1542,7 @@ class ButtonIKMatchAll(bpy.types.Operator):
             raise util.Error(msg)
 
         try:
-            if "karaage" in context.active_object:
+            if "karaage" in context.active_object or "avastar" in context.active_object:
                 return True
         except TypeError:
             msg = "Issues with context object: [%s]" % context.active_object
@@ -1554,7 +1566,7 @@ class PanelIKUI(bpy.types.Panel):
             return False
         else:
             try:
-                if "karaage" in context.active_object:
+                if "karaage" in context.active_object or "avastar" in context.active_object:
                     return True
             except TypeError:
                 return None
@@ -1890,7 +1902,7 @@ class PanelRigUI(bpy.types.Panel):
             return False
         else:
             try:
-                if "karaage" in context.active_object:
+                if "karaage" in context.active_object or "avastar" in context.active_object:
                     return True
             except TypeError:
                 return None
@@ -3344,7 +3356,7 @@ def check_for_armatures_on_update(dummy):
     prop.object_count = object_count
 
     for obj in [obj for obj in bpy.data.objects if obj.type == 'ARMATURE']:
-        if "karaage" in obj:
+        if "karaage" in obj or "avastar" in obj:
             entry = prop.targets.add()
         else:
             entry = prop.sources.add()
