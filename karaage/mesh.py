@@ -486,11 +486,11 @@ class ButtonGenerateWeights(bpy.types.Operator):
         if not armobj:
             return
 
-        if not "karaage" in armobj:
+        if not "karaage" in armobj or "avastar" in armobj:
             col.label("Object Not rigged to Karaage", icon='INFO')
             return
 
-        if "karaage-mesh" in obj:
+        if "karaage-mesh" in obj or 'avastar-mesh' in obj:
             col.operator(ButtonConvertShapeToCustom.bl_idname, icon="FREEZE")
             return
 
@@ -798,7 +798,9 @@ class ButtonSmoothWeights(bpy.types.Operator):
         obj = context.object
         if obj == None or obj.type != 'MESH': return False
         arm = obj.find_armature()
-        if arm == None or not 'karaage' in arm: return False
+        if arm == None or not 'karaage' in arm:
+            if not 'avastar' in arm:
+                 return False
         if len([b for b in arm.data.bones if b.select]) < 1:      
             return False
         return True
@@ -873,7 +875,9 @@ class ButtonDistributeWeights(bpy.types.Operator):
         obj = context.object
         if obj == None or obj.type != 'MESH': return False
         arm = obj.find_armature()
-        if arm == None or not 'karaage' in arm: return False
+        if arm == None or not 'karaage' in arm:
+            if not 'avastar' in arm:
+                 return False
         if len([b for b in arm.data.bones if b.select]) < 1:     
             return False
 
@@ -1723,7 +1727,14 @@ def revertShapeSlider(obj):
                 shape.loadProps(arm, shape_filename, pack=True)
                 success_armature_name = arm.name
             shape.detachShapeSlider(obj)
+        if arm and "avastar" in arm:
 
+            shape_filename = arm.name #util.get_shape_filename(name)
+            if shape_filename in bpy.data.texts:
+                shape.ensure_drivers_initialized(arm)
+                shape.loadProps(arm, shape_filename, pack=True)
+                success_armature_name = arm.name
+            shape.detachShapeSlider(obj)
     return success_armature_name
 
 class ButtonApplyShapeSliders(bpy.types.Operator):
@@ -3044,6 +3055,7 @@ def freezeSelectedMeshes(context, operator, apply_pose=None, remove_weights=None
                 preserve_volume=preserve_volume)
 
         if 'karaage-mesh'      in dupobj: del dupobj['karaage-mesh']
+        if 'avastar=mesh'      in dupobj: del dupobj['avastar-mesh']
         if 'weight'            in dupobj: del dupobj['weight']
         if 'ShapeDrivers'      in dupobj: del dupobj['ShapeDrivers']
          
@@ -3053,9 +3065,15 @@ def freezeSelectedMeshes(context, operator, apply_pose=None, remove_weights=None
 
             try:
                 del dupobj['karaage-mesh']
+                
             except:
                 pass
                 
+            try:
+                del dupobj['avastar-mesh']
+                
+            except:
+                pass
             dupobj.parent = None
             dupobj.matrix_world = target.matrix_world.copy()
         
@@ -3349,7 +3367,7 @@ def copyBoneWeights(operator, context, obj, weight_sources, clearTargetWeights, 
     other_mesh_count = 0
     for childobj in weight_sources:
         other_mesh_count += 1
-        enforce_usage = enforce_meshes and "karaage-mesh" in childobj and any(childobj.name.startswith(x) for x in enforce_meshes)
+        enforce_usage = enforce_meshes and ("karaage-mesh" in childobj or 'avastar-mesh' in childobj) and any(childobj.name.startswith(x) for x in enforce_meshes)
         if enforce_usage:
             print("Force include [%s] in Weight Copy" % (childobj.name))
         if copy_type == 'EXTENDED' or enforce_usage or (not enforce_meshes and not childobj.hide and not childobj.name.startswith('CustomShape_') \
@@ -3904,7 +3922,7 @@ def exportCollada(context,
                 arm = util.getArmature(obj)
 
                 if arm is not None and arm not in armatures:
-                    if 'karaage' in arm:
+                    if 'karaage' in arm or 'avastar' in arm:
                         armatures.append(arm)
                     else:
                         msg = "%s : Armature [%s] not an Karaage Rig (i can't export the mesh)\n" % (

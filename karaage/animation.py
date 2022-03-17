@@ -270,7 +270,7 @@ def update_affect_all_joints(self, context):
 def update_rig_pose_type(self, context):
     obj = context.object
     armobj = util.get_armature(obj)
-    if armobj and 'karaage' in armobj:
+    if armobj and ('karaage' in armobj or 'avastar' in armobj):
         shape.updateShape(None, context, scene=context.scene, refresh=True, init=False, msg="updateShape after switch pose type")
 
 def update_toggle_select(self, context):
@@ -289,7 +289,7 @@ def update_scene_data(self, context):
     
     scene=context.scene
     active = scene.objects.active
-    if not ( active and active.type =='ARMATURE' and 'karaage' in active):
+    if not ( active and active.type =='ARMATURE' and ('karaage' in active or 'avastar' in active)):
 
         return
     if not active.animation_data:

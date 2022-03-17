@@ -967,7 +967,7 @@ def update_tail_info(context, armobj, remove=False):
 
 def delete_all_shapes(context, armobj):
     shapes = util.getChildren(armobj, type="MESH")
-    for child in (child for child in shapes if 'karaage-mesh' in child):
+    for child in (child for child in shapes if 'karaage-mesh' in child or 'avastar-mesh'):
         context.scene.objects.unlink(child)
         bpy.data.objects.remove(child)
     
@@ -1387,7 +1387,7 @@ def animated_custom_objects(context, armobj, object):
         custom_objects = [ \
             ob for ob in context.visible_objects \
             if ob.type=='MESH' and \
-            not 'karaage-mesh' in ob and \
+            not 'avastar-mesh' in ob and not 'karaage-mesh' in ob and \
             any([mod for mod in ob.modifiers if mod.type=='ARMATURE' and mod.object==armobj])]
 
     custom_objects = [o for o in custom_objects if o.ObjectProp.slider_selector != 'NONE']

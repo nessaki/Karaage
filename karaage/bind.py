@@ -650,7 +650,7 @@ def fix_bone_layers(dummy=None, lazy=True, force=False):
 
     try:
         arm = util.get_armature(context.object)
-        if arm and 'karaage' in arm:
+        if arm and ('karaage' in arm or 'avastar' in arm):
             log.debug("Fix Bone Layers for %s  rigtype:%s filter:%s ..." % ( \
                         arm.name,
                         arm.ObjectProp.rig_display_type,

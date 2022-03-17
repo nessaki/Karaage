@@ -213,7 +213,10 @@ def createAvatar(context, name="Avatar", quads=False, use_restpose=False, no_mes
             parts[name]=obj
 
             obj["weight"]="locked"
-            obj["karaage-mesh"]=1
+            if 'karaage-mesh' in obj:
+                obj["karaage-mesh"]=1
+            if 'avastar-mesh' in obj:
+                obj["karaage-mesh"]=1
             obj["mesh_id"]=name
 
             mat = add_material_for(arm_obj.name, name, True, arm_obj.karaageMaterialProps.type, arm_obj.karaageMaterialProps.unique)

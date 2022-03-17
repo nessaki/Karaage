@@ -382,7 +382,7 @@ class PanelRigDisplay(bpy.types.Panel):
             for obj in context.selected_objects:
                 if obj.type == 'MESH':
                     return True
-                elif 'karaage' in obj or 'Karaage' in obj:
+                elif 'karaage' in obj or 'Karaage' in obj or 'avastar' in obj or 'Avastar' in obj:
                     return True
             return False
         except (TypeError, AttributeError):
@@ -458,7 +458,7 @@ class PanelRiggingConfig(bpy.types.Panel):
             for obj in context.selected_objects:
                 if obj.type == 'MESH':
                     return True
-                elif 'karaage' in obj or 'Karaage' in obj:
+                elif 'karaage' in obj or 'Karaage' in obj or 'avastar' in obj or 'Avastar' in obj:
                     return True
             return False
         except (TypeError, AttributeError):
@@ -667,7 +667,7 @@ class PanelSkinning(bpy.types.Panel):
             for obj in context.selected_objects:
                 if obj.type == 'MESH':
                     return True
-                elif 'karaage' in obj or 'Karaage' in obj:
+                elif 'karaage' in obj or 'Karaage' in obj or 'avastar' in obj or 'Avastar' in obj:
                     return True
             return None
         except (TypeError, AttributeError):
@@ -931,7 +931,7 @@ class PanelPosing(bpy.types.Panel):
             col = layout.column(align=True)
             col.prop(armobj.RigProps,"rig_use_bind_pose")
 
-        if ui_level > UI_STANDARD and armobj and context.mode != 'OBJECT' and 'karaage' in armobj:
+        if ui_level > UI_STANDARD and armobj and context.mode != 'OBJECT' and ('karaage' in armobj or 'avastar' in armobj):
 
             box = layout.box()
 
@@ -1270,7 +1270,7 @@ class PanelKaraageTool(bpy.types.Panel):
             karaage_version, rig_version, rig_id, rig_type = util.get_version_info(armobj)
             if True:#karaage_version != rig_version or len(karaages)>1 or (len(armatures)>0 and len(karaages)>0):
                 col = layout.column(align=True)
-                ctargets = [arm for arm in bpy.context.selected_objects if arm.type=='ARMATURE' and 'karaage' in arm and arm != armobj]
+                ctargets = [arm for arm in bpy.context.selected_objects if arm.type=='ARMATURE' and ('karaage' in arm or 'avastar' in arm) and arm != armobj]
                 copyrig.ButtonCopyKaraage.draw_generic(None, context, layout, armobj, ctargets, repair=(karaage_version == rig_version) )
 
         if len(targets)>0:

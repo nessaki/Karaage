@@ -795,12 +795,12 @@ into account. You may optionally want to set the sliders to SL Restpose
         
         armobj = context.active_object
         col = box.column(align=True)
-        if 'karaage' in armobj:
+        if 'karaage' in armobj or 'avastar' in armobj:
             col.label("Source Rig: KARAAGE")
         else:
             col.prop(updateRigProp, "srcRigType")
 
-        if srcRigType =='KARAAGE' and not 'karaage' in armobj:
+        if srcRigType =='KARAAGE' and (not 'karaage' in armobj or 'avastar' in armobj):
             col   = box.column(align=True)
             col.label("Source rig is not Karaage",icon='ERROR')
             col.label("You Reimport an Karaage?", icon='BLANK1')
@@ -1113,8 +1113,8 @@ into account. You may optionally want to set the sliders to SL Restpose
     
     def move_objects_to_target(self, context, sources, tgt_armature, armature_type):
         scene = context.scene
-        custom_set = [s for s in sources if 'karaage-mesh' not in s] if sources else []
-        system_set = [s for s in sources if 'karaage-mesh' in s] if sources else []
+        custom_set = [s for s in sources if 'karaage-mesh' not in s or 'avastar-mesh' not in s] if sources else []
+        system_set = [s for s in sources if 'karaage-mesh' in s or 'avastar-mesh'] if sources else []
         if len(custom_set) > 0:
             log.info("|  Move %d Custom meshes to %s %s" % (len(custom_set), tgt_armature.type, tgt_armature.name) )
             self.move_subset_to_target(context, custom_set, tgt_armature, armature_type, tgt_armature)

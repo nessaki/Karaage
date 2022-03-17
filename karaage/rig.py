@@ -1416,7 +1416,10 @@ class KaraageFaceWeightGenerator(bpy.types.Operator):
 
         obj=context.object
         arm = util.get_armature(obj)
-        use_full_armature = not 'karaage' in arm
+        if 'avastar' in arm:
+            use_full_armature = not 'avastar' in arm    
+        else:
+            use_full_armature = not 'karaage' in arm
 
         omode = util.ensure_mode_is("OBJECT")
 

@@ -568,20 +568,20 @@ def getSelectedArmsAndAllObjs(context):
     
 def is_karaage(obj):
     arm = get_armature(obj)
-    return (not arm is None and ('karaage' in arm or 'Karaage' in arm))
+    return (not arm is None and ('karaage' in arm or 'Karaage' in arm or 'avastar' in arm or 'Avastar' in arm))
 
 def getSelectedCustomMeshes(selection):
-    custom_meshes = [obj for obj in selection if obj.type=='MESH' and not 'karaage-mesh' in obj and obj.find_armature() ]
+    custom_meshes = [obj for obj in selection if obj.type=='MESH' and not 'karaage-mesh' in obj and not 'avastar-mesh' in obj and obj.find_armature() ]
     return custom_meshes
 
 def getCustomChildren(parent, type=None, select=None, visible=None):
     children = getChildren(parent, type=type, select=select, visible=visible)
-    custom_children = [obj for obj in children if not 'karaage-mesh' in obj]
+    custom_children = [obj for obj in children if not 'karaage-mesh' in obj or not 'avastar-mesh' in obj]
     return custom_children
 
 def getKaraageChildSet(parent, type=None, select=None, visible=None):
     children = getChildren(parent, type=type, select=select, visible=visible)
-    childSet = {obj.name.rsplit('.')[0]:obj for obj in children if 'karaage-mesh' in obj or obj.type=='EMPTY'}
+    childSet = {obj.name.rsplit('.')[0]:obj for obj in children if 'karaage-mesh' in obj or 'avastar-mesh' in obj or obj.type=='EMPTY'}
     return childSet
 
 def object_is_visible(context, ob):
@@ -616,7 +616,7 @@ def get_animated_meshes(context, armature, with_karaage=True, only_selected=Fals
         ]
 
     for mesh in visible_meshes:
-       if with_karaage == False and "karaage-mesh" in mesh:
+       if with_karaage == False and ("karaage-mesh" in mesh or 'avastar-mesh' in mesh):
            continue
            
        if any([mod for mod in mesh.modifiers if mod.type=='ARMATURE' and mod.object==armature]):
@@ -685,8 +685,8 @@ def getControlledBoneNames(bnames):
     return controlNames
 
 def getKaraageArmaturesFromSelection(selection):
-    armatures = [get_armature(obj) for obj in selection if (obj.type == 'ARMATURE' and 'karaage' in obj) or (obj.type=='MESH' and not 'karaage-mesh' in obj and obj.find_armature())]        
-    armatures = set([arm for arm in armatures if 'karaage' in arm])
+    armatures = [get_armature(obj) for obj in selection if (obj.type == 'ARMATURE' and 'karaage' in obj) or (obj.type == 'ARMATURE' and 'avastar' in obj) or (obj.type=='MESH' and not 'karaage-mesh' in obj and obj.find_armature()) or (obj.type=='MESH' and not 'avastar-mesh' in obj and obj.find_armature())]        
+    armatures = set([arm for arm in armatures if ('karaage' in arm or 'avastar' in arm)])
     return armatures
 
 def getVisibleSelectedBoneNames(armobj):
@@ -787,7 +787,7 @@ def getCurrentSelection(context, verbose=False):
     
     for obj in [o for o in context.scene.objects if o.select]:
 
-        if 'karaage' in obj or 'Karaage' in obj:
+        if 'karaage' in obj or 'Karaage' in obj or 'avastar' in obj or 'Avastar' in obj:
             karaages.append(obj)
             if verbose: print("Append Karaage %s" % obj.name)
         elif obj.type=='MESH':
@@ -1349,7 +1349,7 @@ def findKaraageMeshes(parent, meshobjs=None, armature_version=None):
         if child.type=='MESH':
             name = child.name.split(".")[0] 
             if name in ['headMesh','hairMesh','upperBodyMesh','lowerBodyMesh','skirtMesh','eyelashMesh','eyeBallLeftMesh','eyeBallRightMesh']:
-                if armature_version == 2 and not 'karaage-mesh' in child:
+                if armature_version == 2 and (not 'karaage-mesh' in child or not 'avastar-mesh' in child):
                     continue
                     
                 if name in meshobjs:
@@ -1385,6 +1385,7 @@ def ensure_shadow_exists(key, arm, obj, me = None):
         shadow.parent      = arm
 
         if 'karaage-mesh' in shadow: del shadow['karaage-mesh'] 
+        if 'avastar-mesh' in shadow: del shadow['avastar-mesh'] 
         if 'mesh_id'      in shadow: del shadow['mesh_id']      
 
         context.scene.objects.unlink(shadow)
@@ -2351,7 +2352,7 @@ def remove_karaage_children(src, context, remove=True):
     for obj in [obj for obj in src.children]:
         name = obj.name
         unlinked.extend(remove_karaage_children(obj, context, remove))
-        if "karaage-mesh" in obj or (obj.type == 'EMPTY' and len(obj.children)==0):
+        if "karaage-mesh" in obj or 'avastar-mesh' in obj or (obj.type == 'EMPTY' and len(obj.children)==0):
 
             try:
                 context.scene.objects.unlink(obj)
